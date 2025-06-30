@@ -1,7 +1,7 @@
 ---
-title: "Writing a great story for data science projects - spring 2025"
+title: "Writing a great story for data science projects - Summer 2025"
 subtitle: "This is a Report Template Quarto"
-author: "Students names (Advisor: Dr. Cohen)"
+author: "Colby Fenters & Lilith Holland (Advisor: Dr. Cohen)"
 date: '`r Sys.Date()`'
 format:
   html:
