@@ -100,32 +100,257 @@ $$
 
 A study was conducted to determine how...
 
-```{r, warning=FALSE, echo=T, message=FALSE}
-# loading packages 
-library(tidyverse)
-library(knitr)
-library(ggthemes)
-library(ggrepel)
-library(dslabs)
+```{r}
+reticulate::repl_python()
 ```
 
-```{r, warning=FALSE, echo=TRUE}
-# Load Data
-kable(head(murders))
+```{python, warning=FALSE, echo=T, message=FALSE}
+# %pip install polars==1.22.0
+# %pip install numpy
+# %pip install pandas
+# %pip install seaborn
+# %pip install matplotlib
+# %pip install pyarrow
+# %pip install datetime
+```
 
-ggplot1 = murders %>% ggplot(mapping = aes(x=population/10^6, y=total)) 
+```{python, warning=FALSE, eval=FALSE}
+# Standard library imports (e.g., OS, datetime, etc.)
+import os
+import typing
+import datetime
+from pathlib import Path
+import shutil
 
-  ggplot1 + geom_point(aes(col=region), size = 4) +
-  geom_text_repel(aes(label=abb)) +
-  scale_x_log10() +
-  scale_y_log10() +
-  geom_smooth(formula = "y~x", method=lm,se = F)+
-  xlab("Populations in millions (log10 scale)") + 
-  ylab("Total number of murders (log10 scale)") +
-  ggtitle("US Gun Murders in 2010") +
-  scale_color_discrete(name = "Region")+
-      theme_bw()
+# Third-party libraries
+import numpy as np
+import polars as pl
+import seaborn as sns
+import pandas as pd
+from polars.testing.parametric import columns
+from tqdm import tqdm
+import geopy.distance
+import scipy
+import sklearn.preprocessing as pre
+import geopandas
+import shapely
+from shapely.geometry import Polygon, Point
+import matplotlib.pyplot as plt
+import matplotlib.animation as animation
+```
+
+```{python, warning=FALSE, echo=TRUE}
+import datetime
+import polars as pl
+
+start_date = datetime.datetime(2010, 1, 1, 0, 0)
+end_date = datetime.datetime(2020, 12, 31, 0, 0)
+
+seed = 3435
+
+pl.enable_string_cache()
+
+data_path = r'kansas_asos_2010_2020.csv'
+```
+
+```{python, warning=FALSE, echo=TRUE}
+metar_schema = {'station': pl.Categorical,
+                'valid': pl.Datetime,
+                'lon': pl.Float64,
+                'lat': pl.Float64,
+                'elevation': pl.Float64,
+                'tmpf': pl.Float64,
+                'dwpf': pl.Float64,
+                'relh': pl.Float64,
+                'drct': pl.Float64,
+                'sknt': pl.Float64,
+                'p01i': pl.Float64,
+                'alti': pl.Float64,
+                'mslp': pl.Float64,
+                'vsby': pl.Float64,
+                'gust': pl.Float64,
+                'skyc1': pl.Categorical,
+                'skyc2': pl.Categorical,
+                'skyc3': pl.Categorical,
+                'skyc4': pl.Categorical,
+                'skyl1': pl.Float64,
+                'skyl2': pl.Float64,
+                'skyl3': pl.Float64,
+                'skyl4': pl.Float64,
+                'wxcodes': pl.String,
+                'ice_accretion_1hr': pl.Float64,
+                'ice_accretion_3hr': pl.Float64,
+                'ice_accretion_6hr': pl.Float64,
+                'peak_wind_gust': pl.Float64,
+                'peak_wind_drct': pl.Float64,
+                'peak_wind_time': pl.Datetime,
+                'feel': pl.Float64,
+                'metar': pl.String,
+                'snowdepth': pl.Float64}
+```
+
+```{python, warning=FALSE, echo=TRUE}
+asos_ldf = pl.scan_csv(data_path, null_values=['T', 'M', '///'], schema=metar_schema)\
+    .drop('metar')\
+    .with_columns(pl.col('valid').dt.round('1h').alias('valid'))
+```
+
+```{python, warning=FALSE, echo=TRUE}
+import numpy as np
+
+full_date_series = np.arange(start_date, end_date, datetime.timedelta(hours=1))
+
+asos_df = asos_ldf\
+    .collect()\
+    .select(pl.col('station', 'lat', 'lon', 'elevation'))\
+    .unique()\
+    .join(pl.DataFrame({'valid': full_date_series}), how='cross')\
+    .join(asos_ldf.collect(), on=['station', 'valid'], how='left')\
+    .with_columns(pl.col('valid').dt.round('6h').alias('valid'))\
+    .drop('lat_right', 'lon_right', 'elevation_right')\
+    .group_by(['station', 'valid'])\
+    .mean()\
+    .with_columns(pl.col(pl.Float64).cast(pl.Float32))
+```
+
+```{python, warning=FALSE, echo=TRUE}
+potential_features = asos_ldf.drop('valid', 'station', 'lat', 'lon', 'elevation').collect_schema().names()
+feature_list = []
+
+for feature in potential_features:
+    if not asos_df.select(pl.col(feature).is_null().all()).item():
+        feature_list.append(feature)
+
+stations_list = asos_df\
+    .select(pl.col('station'))\
+    .unique()\
+    .to_series()\
+    .to_list()
+```
+
+```{python, warning=FALSE, echo=TRUE}
+def safe_index(item, lst):
+    return item in lst
   
+year_series = np.arange(start_date.year, end_date.year + 1, 1)
+reduced_feature_df = pl.DataFrame(schema={**{'start_year': pl.Int64, 'end_year': pl.Int64, 'year_range': pl.Int64, 'year_label': pl.String, 'feature': pl.String},
+                                          **{station: pl.Boolean for station in stations_list}
+                                          })
+
+for index, a in enumerate(year_series):
+    for b in year_series[index:]:
+        shifted_date_series = np.arange(datetime.date(a, 1, 1), datetime.date(b, 12, 31), datetime.timedelta(hours=6))
+        year_filter_df = asos_df.filter(pl.col('valid').dt.year().is_between(a, b))
+        for feature in feature_list:
+            if (year_filter_df.select(pl.col(feature).null_count()) != year_filter_df.height).item():
+                asos_pivot_df = year_filter_df\
+                    .pivot(on='station', index='valid', values=feature, aggregate_function='mean')\
+                    .drop('valid')
+                valid_stations = [s.name for s in asos_pivot_df if not (s.null_count() > len(shifted_date_series)*0.1)]
+                if len(valid_stations) >= 6:
+                    if asos_pivot_df.var().select(pl.mean_horizontal(pl.all()).alias('mean')).item() > 5:
+                        valid_stations.sort()
+                        new_row = pl.DataFrame({**{'start_year': a,
+                                                   'end_year': b,
+                                                   'year_range': (b+1) - a,
+                                                   'year_label': f'{a}-{b}',
+                                                   'feature': feature},
+                                                **{station: safe_index(station, valid_stations) for station in stations_list}
+                                                })
+                        reduced_feature_df = reduced_feature_df.vstack(new_row)
+```
+
+```{python, warning=FALSE, echo=TRUE}
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+features = reduced_feature_df.select(pl.col('feature')).unique().to_series().to_list()
+
+n_cols = 3
+n_rows = -(-len(features) // n_cols)  # Ceiling division
+
+fig, axes = plt.subplots(n_rows, n_cols, figsize=(n_cols * 4, n_rows * 3), constrained_layout=True,
+                         sharex=True, sharey=True)
+axes = axes.flatten()
+
+for idx, feature in enumerate(features):
+    plot_df = (
+        reduced_feature_df
+        .filter(pl.col('feature') == feature)
+        .drop('feature', 'start_year', 'end_year', 'year_range')
+        .to_pandas()
+    )
+
+    plot_df.index = plot_df['year_label'].astype(str)  # Ensure index is str, not int
+    plot_df = plot_df.drop('year_label', axis=1)
+    plot_df = plot_df.sort_index()
+
+    ax = axes[idx]
+    sns.heatmap(plot_df, cmap='magma', annot=True, cbar=False, ax=ax)
+
+    ax.set_title(feature)
+
+# Shared axis labels
+fig.suptitle("Station Participation by Feature and Year", fontsize=16)
+fig.supxlabel("Stations")
+fig.supylabel("Year")
+
+plt.show()
+
+```
+
+```{python, warning=FALSE, echo=TRUE}
+df_t = reduced_feature_df\
+    .filter(pl.col('year_label').eq('2018-2020'))\
+    .drop('year_range', 'year_label', 'start_year', 'end_year')\
+    .transpose(include_header=True)
+
+
+new_headers = df_t.row(0)
+
+# Drop the first row
+df_t_no_header = df_t.slice(1, df_t.height - 1)
+
+# Assign new headers
+df_t_renamed = df_t_no_header.rename({old: str(new) for old, new in zip(df_t_no_header.columns, new_headers)})
+
+
+#
+# \
+#     .unpivot()\
+#     .map_rows(lambda x: (x[0], 'NAN') if x[1] == 'false' else x)\
+#     .filter(pl.col('column_1').ne('NAN'))\
+
+```
+
+```{python, warning=FALSE, echo=TRUE}
+valid_features = [col for col in df_t_renamed.columns if col != "feature"]
+valid_stations = df_t_renamed\
+    .with_columns(pl.col(valid_features)\
+                  .map_elements(lambda x: x == 'true', return_dtype=pl.Boolean))\
+    .filter( pl.all_horizontal([pl.col(col) for col in valid_features]))\
+    .select(pl.col('feature'))\
+    .to_series()\
+    .to_list()
+```
+
+```{python, warning=FALSE, echo=TRUE}
+reduced_asos_df = asos_df\
+    .filter(pl.col('valid').is_between(datetime.datetime(2018, 1, 1, 0, 0), datetime.datetime(2021, 1, 1, 0, 0)))\
+    .filter(pl.col('station').is_in(valid_stations))\
+    .select(pl.col(['station', 'valid', 'lat', 'lon', 'elevation'] + valid_features))
+
+```
+
+```{python, warning=FALSE, echo=TRUE}
+reduced_asos_df
+```
+
+```{python, warning=FALSE, echo=TRUE}
+
+```
+
+```{python, warning=FALSE, echo=TRUE}
 
 ```
 
