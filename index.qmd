@@ -32,35 +32,25 @@ writing!
 
 ## Introduction
 
-The introduction should:
+Currently a work in progress
 
--   Develop a storyline that captures attention and maintains interest.
+For this project we hope to compare the predictive power of a traditional
+linear model against a graph neural network on weather station data. 
 
--   Your audience is your peers
+The weather station data is comprised of weather station nodes that are within
+the same geographic location. For the linear model two variants will be
+produced, one that is trained on all data treating each station as a node and
+another trained on each station individually.
 
--   Clearly state the problem or question you're addressing.
+The GNN will be trained on the entire graph of the weather station data using
+a dense adjacency matrix with no self connection.
 
-<!-- -->
-
--   Introduce why it is relevant needs.
-
--   Provide an overview of your approach.
-
-Example of writing including citing references:
-
-*This is an introduction to ..... regression, which is a non-parametric
-estimator that estimates the conditional expectation of two variables
-which is random. The goal of a kernel regression is to discover the
-non-linear relationship between two random variables. To discover the
-non-linear relationship, kernel estimator or kernel smoothing is the
-main method to estimate the curve for non-parametric statistics. In
-kernel estimator, weight function is known as kernel function
-[@efr2008]. Cite this paper [@bro2014principal]. The GEE [@wang2014].
-The PCA [@daffertshofer2004pca]*. Topology can be used in machine learning [@adams2021topology]
-
-*This is my work and I want to add more work...*
+The training will focus on producing forecasts with the performance being
+compared over a 6 month period on the tail end of the data.
 
 ## Methods
+
+This section will be expanded as the cleaning process is further refined
 
 -   Detail the models or algorithms used.
 
@@ -112,6 +102,13 @@ reticulate::repl_python()
 # %pip install matplotlib
 # %pip install pyarrow
 # %pip install datetime
+# %pip install contextily
+# %pip install h3==3.7.7
+# %pip install shapely
+# %pip install geopandas
+# %pip install scikit-learn
+# %pip install tqdm
+# %pip install hypothesis==6.135.26
 ```
 
 ```{python, warning=FALSE, eval=FALSE}
@@ -128,15 +125,19 @@ import polars as pl
 import seaborn as sns
 import pandas as pd
 from polars.testing.parametric import columns
+from sklearn.preprocessing import MinMaxScaler, minmax_scale
 from tqdm import tqdm
 import geopy.distance
 import scipy
 import sklearn.preprocessing as pre
 import geopandas
 import shapely
-from shapely.geometry import Polygon, Point
+from shapely.geometry import Polygon, Point, LineString
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
+
+import contextily as ctx
+from h3 import h3
 ```
 
 ```{python, warning=FALSE, echo=TRUE}
@@ -229,6 +230,8 @@ stations_list = asos_df\
 ```
 
 ```{python, warning=FALSE, echo=TRUE}
+from tqdm import tqdm
+
 def safe_index(item, lst):
     return item in lst
   
@@ -237,7 +240,7 @@ reduced_feature_df = pl.DataFrame(schema={**{'start_year': pl.Int64, 'end_year':
                                           **{station: pl.Boolean for station in stations_list}
                                           })
 
-for index, a in enumerate(year_series):
+for index, a in enumerate(tqdm(year_series)):
     for b in year_series[index:]:
         shifted_date_series = np.arange(datetime.date(a, 1, 1), datetime.date(b, 12, 31), datetime.timedelta(hours=6))
         year_filter_df = asos_df.filter(pl.col('valid').dt.year().is_between(a, b))
@@ -313,14 +316,6 @@ df_t_no_header = df_t.slice(1, df_t.height - 1)
 
 # Assign new headers
 df_t_renamed = df_t_no_header.rename({old: str(new) for old, new in zip(df_t_no_header.columns, new_headers)})
-
-
-#
-# \
-#     .unpivot()\
-#     .map_rows(lambda x: (x[0], 'NAN') if x[1] == 'false' else x)\
-#     .filter(pl.col('column_1').ne('NAN'))\
-
 ```
 
 ```{python, warning=FALSE, echo=TRUE}
@@ -338,8 +333,19 @@ valid_stations = df_t_renamed\
 reduced_asos_df = asos_df\
     .filter(pl.col('valid').is_between(datetime.datetime(2018, 1, 1, 0, 0), datetime.datetime(2021, 1, 1, 0, 0)))\
     .filter(pl.col('station').is_in(valid_stations))\
-    .select(pl.col(['station', 'valid', 'lat', 'lon', 'elevation'] + valid_features))
+    .select(pl.col(['station', 'valid', 'lat', 'lon', 'elevation'] + valid_features))\
+    .sort(['valid', 'station'])\
+    .with_columns([(pl.col('drct').map_elements(lambda x: np.sin(np.radians(x)), return_dtype=pl.Float64)).alias('drct_sin'),
+                   (pl.col('drct').map_elements(lambda x: np.cos(np.radians(x)), return_dtype=pl.Float64)).alias('drct_cos')])\
+    .drop('drct')
 
+row_count, feature_count = reduced_asos_df.drop('station', 'valid', 'lat', 'lon', 'elevation').shape
+valid_station = reduced_asos_df.select(pl.col('station')).unique().to_series().to_list()
+station_count = len(valid_station)
+valid_features = reduced_asos_df.drop('station', 'valid', 'lat', 'lon', 'elevation').columns
+
+# shape is time, station, feature
+station_matrix = reduced_asos_df.drop('station', 'valid', 'lat', 'lon', 'elevation').to_numpy().reshape(int(row_count/station_count), station_count, feature_count)
 ```
 
 ```{python, warning=FALSE, echo=TRUE}
@@ -347,13 +353,212 @@ reduced_asos_df
 ```
 
 ```{python, warning=FALSE, echo=TRUE}
+# as this is true it means there are no time slices where all values are nan
+not np.any(np.all(np.isnan(station_matrix), axis=(1, 2)))
+```
 
+```{python, warning=FALSE, echo=TRUE}
+import geopy.distance
+# calculate the geodesic distance between two nodes
+def compute_node_distance(node1, node2, inverse=False):
+    coords_1 = (node1[1], node1[0])
+    coords_2 = (node2[1], node2[0])
+    # elevation_difference = abs(node1[2] - node2[2])
+    horizontal_distance = geopy.distance.geodesic(coords_1, coords_2).km
+    # return math.sqrt(horizontal_distance**2 + (elevation_difference/1000)**2)
+    if inverse:
+        try:
+            horizontal_distance = 1/horizontal_distance
+        except ZeroDivisionError:
+            horizontal_distance = 0
+    return horizontal_distance
+```
+
+```{python, warning=FALSE, echo=TRUE}
+station_df = reduced_asos_df.select(pl.col(['station', 'lon', 'lat', 'elevation'])).unique().to_pandas()
+grid_list = station_df.loc[:, ['lon', 'lat']].reset_index()[['lon', 'lat', 'index']].to_numpy().tolist()
+grid_list = [sublist[:-1] + [int(sublist[-1])] for sublist in grid_list]
+
+
+result_dict = {'index': [],
+               'station': []}
+result_dict = {**result_dict, **{str(i): [] for _, _, i in grid_list}}
+
+# find the nearest mesh node for every station node
+for row_index, station in station_df.iterrows():
+    for col_index, station2 in station_df.iterrows():
+        # To get elevation with the new system I would have to find a heightmap for the new lon/lat coordinates
+        result_dict[str(col_index)].append(compute_node_distance([station['lon'], station['lat']], [station2['lon'], station2['lat']], inverse=True))
+    result_dict['station'].append(station['station'])
+    result_dict['index'].append(row_index)
+
+# # generate a dataframe that maps every station node to its relative mesh node with the inverse distance
+grid_map_df = pl.DataFrame(result_dict, schema={**{'station': pl.Categorical, 'index': pl.UInt64}, **{str(i): pl.Float64 for _, _, i in grid_list}})
+```
+
+```{python, warning=FALSE, echo=TRUE}
+from sklearn.preprocessing import MinMaxScaler, minmax_scale
+
+scaled_idistance = minmax_scale(grid_map_df.drop('station', 'index'))
+modified_adjacency_df = grid_map_df.select(pl.col(['station', 'index']))\
+    .join(pl.DataFrame(scaled_idistance, schema=[str(i) for i, _ in enumerate(scaled_idistance)]).with_row_index(),
+          on='index')
+```
+
+```{python, warning=FALSE, echo=TRUE}
+from shapely.geometry import Polygon, Point, LineString
+import geopandas
+import contextily as ctx
+# Create Point geometries for each station (lon, lat order)
+station_node_list = [Point(lon, lat) for lat, lon in station_df[['lat', 'lon']].to_numpy()]
+stations_gdf = geopandas.GeoDataFrame(station_df.copy(), geometry=station_node_list, crs="EPSG:4326")
+
+# Create edges as LineStrings between all unique pairs of stations
+edge_list = []
+n = len(station_node_list)
+for i in range(n):
+    for j in range(i + 1, n):
+        edge_list.append(LineString([station_node_list[i], station_node_list[j]]))
+
+edges_gdf = geopandas.GeoDataFrame(geometry=edge_list, crs="EPSG:4326")
+
+# Plot everything
+fig, ax = plt.subplots(figsize=(18, 10))
+
+# Plot edges
+edges_gdf.plot(ax=ax, color="xkcd:blue", linewidth=1, alpha=1)
+
+# Plot nodes
+stations_gdf.plot(ax=ax, color="xkcd:bright orange", markersize=10)
+
+# Add station labels
+for i, row in stations_gdf.iterrows():
+    ax.text(row.geometry.x, row.geometry.y, row['station'], fontsize=9)
+
+# Add basemap
+ctx.add_basemap(ax, crs=stations_gdf.crs.to_string())
+```
+
+```{python, warning=FALSE, echo=TRUE}
+adj = modified_adjacency_df.drop('station', 'index').to_numpy()
+adj = adj / adj.sum(axis=1, keepdims=True)  # row normalize
+
+def spatial_impute(data, adj):
+    imputed = data.copy()
+    T, N, F = data.shape
+
+    for t in range(T):  # time index
+        for i in range(N):  # station index
+            for f in range(F):  # feature index
+                if np.isnan(imputed[t, i, f]):
+                    # Get neighbor values and weights
+                    neighbor_vals = imputed[t, :, f]
+                    weights = adj[i]
+                    mask = ~np.isnan(neighbor_vals)
+
+                    if mask.sum() > 0:
+                        imputed[t, i, f] = np.dot(weights[mask], neighbor_vals[mask]) / weights[mask].sum()
+
+    return imputed
+
+def spatiotemporal_impute(data, adj):
+    data = spatial_impute(data, adj)
+
+    # fill remaining NaNs using temporal interpolation
+    T, N, F = data.shape
+    for i in tqdm(range(N)):
+        for f in range(F):
+            series = data[:, i, f]
+            mask = ~np.isnan(series)
+            if mask.sum() == 0:
+                continue  # entire feature missing, can't interpolate
+            # Linear interpolation
+            indices = np.arange(T)
+            data[:, i, f] = np.interp(indices, indices[mask], series[mask])
+
+    return data
+
+data_imputed = spatiotemporal_impute(station_matrix, adj)
+```
+
+```{python, warning=FALSE, echo=TRUE}
+import pandas as pd
+pd.DataFrame(data_imputed[:200, :, 2]).plot(legend=False, subplots=True, figsize=(20, 8))
+pd.DataFrame(station_matrix[:200, :, 2]).plot(legend=False, subplots=True, figsize=(20, 8))
+```
+
+```{python, warning=FALSE, echo=TRUE}
+def node_correlation(data, node_number):
+    T, N, F = data.shape
+
+    # Store correlation matrices per node (features x features)
+    corr_within_node = np.empty((N, F, F))
+
+    for node in range(N):
+        # Slice data for node: shape (T, F)
+        node_data = data[:, node, :]
+        # Compute correlation matrix (features x features)
+        corr_within_node[node] = np.corrcoef(node_data, rowvar=False)
+
+    # Example: correlation between feature 0 and feature 1 at node 0
+    corr_list = []
+    for f_feature in range(F):
+        inner_list = []
+        for s_feature in range(F):
+            if f_feature < s_feature:
+                inner_list.append(np.nan)
+            else:
+                inner_list.append(float(corr_within_node[node_number, f_feature, s_feature]))
+        corr_list.append(inner_list)
+    return corr_list
+  
+def between_node_correlation(data, feature_number):
+
+    feature_data = data[:, :, feature_number]
+
+    corr_between_nodes = np.corrcoef(feature_data.T)
+    corr_between_nodes[np.triu_indices(corr_between_nodes.shape[0], 1)] = np.nan
+
+    return corr_between_nodes
+```
+
+```{python, warning=FALSE, echo=TRUE}
+fig, axes = plt.subplots(2, 4, figsize=(20, 10))
+axes = axes.flatten()
+
+for i in range(data_imputed.shape[1]):
+    corr_matrix = pd.DataFrame(
+        node_correlation(data_imputed, i),
+        columns=valid_features,
+        index=valid_features
+    )
+    sns.heatmap(corr_matrix, annot=True, cmap='coolwarm', vmin=-1, vmax=1, ax=axes[i])
+    axes[i].set_title(f'{valid_station[i]} Correlation')
+
+plt.tight_layout()
+plt.show()
+```
+
+```{python, warning=FALSE, echo=TRUE}
+fig, axes = plt.subplots(2, 4, figsize=(20, 10))  # 2 rows, 4 columns grid
+axes = axes.flatten()
+
+for i in range(data_imputed.shape[2]):
+    corr_matrix = pd.DataFrame(
+        between_node_correlation(data_imputed, i),
+        columns=valid_station,
+        index=valid_station
+    )
+    sns.heatmap(corr_matrix, annot=True, cmap='coolwarm', vmin=-1, vmax=1, ax=axes[i])
+    axes[i].set_title(f'Between-Node Correlation: {valid_features[i]}')
+
+plt.tight_layout()
+plt.show()
 ```
 
 ```{python, warning=FALSE, echo=TRUE}
 
 ```
-
 ### Modeling and Results
 
 -   Explain your data preprocessing and cleaning steps.
