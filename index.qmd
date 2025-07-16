@@ -125,7 +125,7 @@ import polars as pl
 import seaborn as sns
 import pandas as pd
 from polars.testing.parametric import columns
-from sklearn.preprocessing import MinMaxScaler, minmax_scale
+from sklearn.preprocessing import minmax_scale, robust_scale
 from tqdm import tqdm
 import geopy.distance
 import scipy
@@ -340,7 +340,7 @@ reduced_asos_df = asos_df\
     .drop('drct')
 
 row_count, feature_count = reduced_asos_df.drop('station', 'valid', 'lat', 'lon', 'elevation').shape
-valid_station = reduced_asos_df.select(pl.col('station')).unique().to_series().to_list()
+valid_station = reduced_asos_df.select(pl.col('station')).head(7).to_series().to_list()
 station_count = len(valid_station)
 valid_features = reduced_asos_df.drop('station', 'valid', 'lat', 'lon', 'elevation').columns
 
@@ -554,6 +554,42 @@ for i in range(data_imputed.shape[2]):
 
 plt.tight_layout()
 plt.show()
+```
+
+```{python, warning=FALSE, echo=TRUE}
+from sklearn.preprocessing import robust_scale
+
+T, N, F = data_imputed.shape
+imputed_df = pl.from_numpy(data_imputed.reshape(T * N, F), schema=valid_features)\
+    .drop('dwpf', 'feel')\
+    .with_columns(pl.DataFrame([valid_station[i % len(valid_station)] for i in range(T*N)], schema={'station': pl.Categorical})\
+          .join(pl.from_pandas(station_df),
+                on='station',
+                how='left'))\
+    .select(pl.col(['station', 'lon', 'lat', 'elevation', 'tmpf', 'relh', 'sknt', 'drct_sin', 'drct_cos']))\
+    .drop('lon', 'lat', 'elevation')\
+    .with_columns(pl.col('relh')/100)
+
+imputed_df = imputed_df.drop('tmpf', 'sknt')\
+    .hstack(pl.DataFrame(robust_scale(imputed_df.select(pl.col('tmpf'))), schema=['tmpf']))\
+    .hstack(pl.DataFrame(robust_scale(imputed_df.select(pl.col('sknt'))), schema=['sknt']))\
+    .select(pl.col(['station', 'tmpf', 'relh', 'sknt', 'drct_sin', 'drct_cos']))
+
+imputed_df
+```
+
+```{python, warning=FALSE, echo=TRUE}
+# if the station is going to be used for linear regression apply a one-hot encoding to it
+imputed_pd_df = imputed_df.to_pandas()
+imputed_pl_df = imputed_df
+```
+
+```{python, warning=FALSE, echo=TRUE}
+
+```
+
+```{python, warning=FALSE, echo=TRUE}
+
 ```
 
 ```{python, warning=FALSE, echo=TRUE}
