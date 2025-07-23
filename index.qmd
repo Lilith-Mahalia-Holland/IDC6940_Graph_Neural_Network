@@ -83,6 +83,7 @@ values at the next time step. Each input consists of a concatenation of the five
 meteorological features across four sequential time steps, resulting in a 
 fixed length input vector per prediction target.
 The five input features are:
+
  - Temperature
  - Relative Humidity
  - Wind Speed
@@ -92,22 +93,29 @@ The five input features are:
 The GNN is designed to capture spatiotemporal dependencies in the weather station
 network. It is implemented using PyTorch and follows a structure inspired by
 the Diffusion Convolutional Recurrant Neural Network (DCRNN) architecture.
+
  - Architecture
-  - Input Format:
-   -Data is structured using the StaticGraphTemporalSignal format,
+   - Input Format:
+     - Data is structured using the StaticGraphTemporalSignal format,
+   
   where each node represents a weather station and temporal sequences of node 
   features are used for prediction.
-  - Layers:
+  
+ - Layers:
    - A DCRNN layer to capture spatial and temporal dependencies
    - A ReLU activation function
    - A Linear output layer for final prediction
+   
  - Training Configuration
-  - Optimizer
-   - Adam
-  -Learning Rate:
+   - Optimizer
+     - Adam
+   
+ - Learning Rate:
    - Base learning rate of 0.01 but will reduce by 0.1 at a plateau
-  -Epochs:
+   
+ - Epochs:
    - Trained for a maximum of 100 epochs with an early exit callback
+   
 The model is trained to predict the same five features (temperature, relative
 humidity, wind speed, wind direction sin, wind direction cosine) for the next
 time step based on the preceding four time steps, analogous to the linear model.
