@@ -1,6 +1,6 @@
 ---
-title: "Writing a great story for data science projects - Summer 2025"
-subtitle: "This is a Report Template Quarto"
+title: "Predictive Modeling of Weather Station Data:"
+subtitle: "Linear Regression vs. Graph Neural Networks"
 author: "Colby Fenters & Lilith Holland (Advisor: Dr. Cohen)"
 date: '`r Sys.Date()`'
 format:
@@ -31,52 +31,87 @@ writing!
 :::
 
 ## Introduction
+### This section will be expanded as the modeling process is further refined
 
-Currently a work in progress
+Accurate weather prediction is a crucial task with widespread implications
+across agriculture, transportation, disaster preparedness, and energy management.
+Traditional forecasting methods often rely on statistical models or physics-based
+simulations, however, with the advancement of graphical neural networks (GNN)
+we believe there is potential in a more modern deep learning approach.
 
-For this project we hope to compare the predictive power of a traditional
-linear model against a graph neural network on weather station data. 
+In this project, we explore the predictive power of a traditional linear regression
+model and a GNN on real-world weather station data. Our aim is to evaluate
+whether the GNN's ability to incorporate spatial relationships between stations
+offers a measurable advantage over more conventional techniques
 
-The weather station data is comprised of weather station nodes that are within
-the same geographic location. For the linear model two variants will be
-produced, one that is trained on all data treating each station as a node and
-another trained on each station individually.
+The dataset consists of multiple weather stations located within the same
+geographic region. Each station collects meteorological variables over time, and
+can be represented as a node within a broader spatial network. For the linear
+model baseline, a single model will be trained using all stations' data
+simultaneously, treating each station as an independent feature source.
 
-The GNN will be trained on the entire graph of the weather station data using
-a dense adjacency matrix with no self connection.
+For the GNN the model will be trained on the entire network of stations, where
+each node corresponds to a station and edges represent spatial relationships.
+The graph is encoded via a dense adjacency matrix, excluding self-connections.
+The GNN aims to leverage the inherent spatial structure of the data, potentially
+capturing regional weather patterns and inter-station dependencies that are
+invisible to traditional models.
 
-The training will focus on producing forecasts with the performance being
-compared over a 6 month period on the tail end of the data.
+Our evaluation focuses on forecasting performance over a 6-month test period at
+the end of the dataset. We asses how well each modelling approach predicts key
+weather variables and investigate the conditions under which one model may
+outperform the other.
 
 ## Methods
 
-This section will be expanded as the cleaning process is further refined
+### This section will be expanded as the modeling process is further refined
 
--   Detail the models or algorithms used.
+This section outlines the modeling approaches, data structure, and training
+procedures used to compare the traditional linear model and the GNN on weather
+station data.
 
--   Justify your choices based on the problem and data.
+### 1. Data selection
+Work in progress
 
-*The common non-parametric regression model is*
-$Y_i = m(X_i) + \varepsilon_i$*, where* $Y_i$ *can be defined as the sum
-of the regression function value* $m(x)$ *for* $X_i$*. Here* $m(x)$ *is
-unknown and* $\varepsilon_i$ *some errors. With the help of this
-definition, we can create the estimation for local averaging i.e.*
-$m(x)$ *can be estimated with the product of* $Y_i$ *average and* $X_i$
-*is near to* $x$*. In other words, this means that we are discovering
-the line through the data points with the help of surrounding data
-points. The estimation formula is printed below [@R-base]:*
+### 2. Cleaning Process
+Work in progress
 
-$$
-M_n(x) = \sum_{i=1}^{n} W_n (X_i) Y_i  \tag{1}
-$$$W_n(x)$ *is the sum of weights that belongs to all real numbers.
-Weights are positive numbers and small if* $X_i$ *is far from* $x$*.*
+### 3. Linear Model
+The linear model is formulated as a time-series regression task. It uses the 
+feature information from the previous four time steps to predict the feature
+values at the next time step. Each input consists of a concatenation of the five
+meteorological features across four sequential time steps, resulting in a 
+fixed length input vector per prediction target.
+The five input features are:
+ - Temperature
+ - Relative Humidity
+ - Wind Speed
+ - Wind Direction (represented as sin and cosine components)
 
+### 4. GNN
+The GNN is designed to capture spatiotemporal dependencies in the weather station
+network. It is implemented using PyTorch and follows a structure inspired by
+the Diffusion Convolutional Recurrant Neural Network (DCRNN) architecture.
+ - Architecture
+  - Input Format:
+   -Data is structured using the StaticGraphTemporalSignal format,
+  where each node represents a weather station and temporal sequences of node 
+  features are used for prediction.
+  - Layers:
+   - A DCRNN layer to capture spatial and temporal dependencies
+   - A ReLU activation function
+   - A Linear output layer for final prediction
+ - Training Configuration
+  - Optimizer
+   - Adam
+  -Learning Rate:
+   - Base learning rate of 0.01 but will reduce by 0.1 at a plateau
+  -Epochs:
+   - Trained for a maximum of 100 epochs with an early exit callback
+The model is trained to predict the same five features (temperature, relative
+humidity, wind speed, wind direction sin, wind direction cosine) for the next
+time step based on the preceding four time steps, analogous to the linear model.
 
-*Another equation:*
-
-$$
-y_i = \beta_0 + \beta_1 X_1 +\varepsilon_i
-$$
 
 ## Analysis and Results
 
