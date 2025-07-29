@@ -1,6 +1,6 @@
 ---
 title: "Predictive Modeling of Weather Station Data:"
-subtitle: "Linear Regression vs. Graph Neural Networks"
+subtitle: "Linear Regression vs. Graph Neural Network"
 author: "Colby Fenters & Lilith Holland (Advisor: Dr. Cohen)"
 date: '`r Sys.Date()`'
 format:
@@ -31,107 +31,168 @@ writing!
 :::
 
 ## Introduction
-### This section will be expanded as the modeling process is further refined
 
-Accurate weather prediction is a crucial task with widespread implications
-across agriculture, transportation, disaster preparedness, and energy management.
-Traditional forecasting methods often rely on statistical models or physics-based
-simulations, however, with the advancement of graphical neural networks (GNN)
-we believe there is potential in a more modern deep learning approach.
+Accurate weather prediction is a crucial task with widespread
+implications across agriculture, transportation, disaster preparedness,
+and energy management. Traditional forecasting methods often rely on
+statistical models or physics-based simulations, however, with the
+advancement of graphical neural networks (GNN) we believe there is
+potential in a more modern deep learning approach.
 
-In this project, we explore the predictive power of a traditional linear regression
-model and a GNN on real-world weather station data. Our aim is to evaluate
-whether the GNN's ability to incorporate spatial relationships between stations
-offers a measurable advantage over more conventional techniques
+In this project, we explore the predictive power of a traditional linear
+regression model and a GNN on real-world weather station data. Our aim
+is to evaluate whether the GNN's ability to incorporate spatial
+relationships between stations offers a measurable advantage over more
+conventional techniques
 
-The dataset consists of multiple weather stations located within the same
-geographic region. Each station collects meteorological variables over time, and
-can be represented as a node within a broader spatial network. For the linear
-model baseline, a single model will be trained using all stations' data
-simultaneously, treating each station as an independent feature source.
+The dataset consists of multiple weather stations located within the
+same geographic region. Each station collects meteorological variables
+over time, and can be represented as a node within a broader spatial
+network. For the linear model baseline, a single model will be trained
+using all stations' data aggregated per feature for each time step.
 
-For the GNN the model will be trained on the entire network of stations, where
-each node corresponds to a station and edges represent spatial relationships.
-The graph is encoded via a dense adjacency matrix, excluding self-connections.
-The GNN aims to leverage the inherent spatial structure of the data, potentially
-capturing regional weather patterns and inter-station dependencies that are
-invisible to traditional models.
+For the GNN the model will be trained on the entire network of stations,
+where each node corresponds to a station and edges represent spatial
+relationships. The graph is encoded via a dense adjacency matrix,
+excluding self-connections. The GNN aims to leverage the inherent
+spatial structure of the data, potentially capturing regional weather
+patterns and inter-station dependencies that are invisible to
+traditional models.
 
-Our evaluation focuses on forecasting performance over a 6-month test period at
-the end of the dataset. We asses how well each modelling approach predicts key
-weather variables and investigate the conditions under which one model may
-outperform the other.
+Our evaluation focuses on forecasting performance over the last 6-months
+of the dataset. We asses how well each modelling approach predicts key
+weather variables and investigate the conditions under which one model
+may outperform the other.
 
 ## Methods
 
-### This section will be expanded as the modeling process is further refined
+This section outlines the modeling approaches, data structure, and
+training procedures used to compare the traditional linear model and the
+GNN on weather station data.
 
-This section outlines the modeling approaches, data structure, and training
-procedures used to compare the traditional linear model and the GNN on weather
-station data.
+### 1. Data Structure
 
-### 1. Data selection
-Work in progress
+The base dataset consists of 33 features, over 8 stations, with 96,408
+hourly time-steps with intermittent sections of missing data. The key
+features of interest are as follows with descriptions from
+[@Herzmann_IEM_2023]:
+
+| Feature | Description |
+|------------|------------------------------------------------------------|
+| station | Station identifier code (3/4 characters) |
+| valid | Timestamp of the observation |
+| lon | Longitude of station |
+| lat | Latitude of station |
+| elevation | Elevation of station |
+| tmpf | Air temperature in Fahrenheit |
+| relh | Relative humidity in percent |
+| drct | Wind direction in degrees |
+| sknt | Wind speed in knots |
+| p01i | One hour precipitation for the period from the observation time to the time of the previous hourly precipitation reset |
+| vsby | visibility in miles |
+
+While the dataset has many other features included, the remaining
+features are of little interest for the purposes of this project.
 
 ### 2. Cleaning Process
-Work in progress
+
+The cleaning process for the data was a multistage procedure that
+started with:
+
+1.  Filling in all missing time steps for all stations between the min
+    and max dataset timestep
+
+2.  Compressing the timesteps from 1hr intervals down to 6hr intervals
+
+3.  Removing any features that were missing more than 10% of their
+    values in more than 6 of the 8 stations.
+
+4.  Remove any stations that are missing more than 2 years of valid data
+    (some stations are newer than others)
+
+5.  Perform correlation analysis on each feature by between nodes and
+    within nodes
+
+6.  Scale remaining features with appropriate scalers
+
+7.  Transform remaining dataframe into an array of shape time, station,
+    feature
 
 ### 3. Linear Model
-The linear model is formulated as a time-series regression task. It uses the 
-feature information from the previous four time steps to predict the feature
-values at the next time step. Each input consists of a concatenation of the five
-meteorological features across four sequential time steps, resulting in a 
-fixed length input vector per prediction target.
+
+The linear model is formulated as a time-series regression task. It uses
+the feature information from the previous twenty-eight time steps (seven
+days) to predict the feature values at the next time step. Each input
+consists of an aggregation of each nodes feature for the five
+meteorological features, resulting in a fixed length input vector per
+prediction target.
+
+$t_{+1}=\text{features}_t+\text{features}_{t-1}+...+\text{features}_{t-27}$
+
+$\text{feature}_t=\text{tmpf, relh, sknt, drctsin, drctcos}$
+
 The five input features are:
 
- - Temperature
- - Relative Humidity
- - Wind Speed
- - Wind Direction (represented as sin and cosine components)
+-   Temperature
+-   Relative Humidity
+-   Wind Speed
+-   Wind Direction (represented as sin and cosine components)
 
 ### 4. GNN
-The GNN is designed to capture spatiotemporal dependencies in the weather station
-network. It is implemented using PyTorch and follows a structure inspired by
-the Diffusion Convolutional Recurrant Neural Network (DCRNN) architecture.
 
- - Architecture
-   - Input Format:
-     - Data is structured using the StaticGraphTemporalSignal format,
-   
-  where each node represents a weather station and temporal sequences of node 
-  features are used for prediction.
-  
- - Layers:
-   - A DCRNN layer to capture spatial and temporal dependencies
-   - A ReLU activation function
-   - A Linear output layer for final prediction
-   
- - Training Configuration
-   - Optimizer
-     - Adam
-   
- - Learning Rate:
-   - Base learning rate of 0.01 but will reduce by 0.1 at a plateau
-   
- - Epochs:
-   - Trained for a maximum of 100 epochs with an early exit callback
-   
-The model is trained to predict the same five features (temperature, relative
-humidity, wind speed, wind direction sin, wind direction cosine) for the next
-time step based on the preceding four time steps, analogous to the linear model.
+The GNN is designed to capture spatiotemporal dependencies in the
+weather station network. It is implemented using PyTorch and follows a
+structure inspired by the Diffusion Convolutional Recurrant Neural
+Network (DCRNN) architecture.
 
+-   Architecture
+    -   Input Format:
+        -   Data is structured using the StaticGraphTemporalSignal
+            format
+        -   Data is split such that:
+            -   Testing = last 6 months (730 6 hr time steps)
+            -   Training = Head 80% of the remaining data
+            -   Validation = Tail 20% of the remaining data
+
+Each node represents a weather station and temporal sequences of node
+features are used for prediction.
+
+-   Layers:
+    -   A DCRNN layer to capture spatial and temporal dependencies
+    -   A ReLU activation function
+    -   A Linear output layer for final prediction
+    -   The full structure is:
+        -   DCRN(140, 64) -\> ReLU -\> DCRN(64, 32) -\> ReLU -\>
+            DCRN(32, 32) -\> ReLU -\> Linear(32, 1)
+-   Training Configuration
+    -   Optimizer
+        -   Adam
+-   Learning Rate:
+    -   Base learning rate of 0.01 but will reduce by 0.1 at a plateau
+        down until 1e-5
+-   Epochs:
+    -   Trained for a maximum of 100 epochs with an early exit on
+        plateau callback
+
+The model is trained to predict the temperature for the next time step
+based on the preceding twnty-eight time steps, analogous to the linear
+model.
 
 ## Analysis and Results
 
 ### Data Exploration and Visualization
 
--   Describe your data sources and collection process.
+#### 1. Source:
 
--   Present initial findings and insights through visualizations.
+The data used in this project is source from the Iowa Environmental
+Mesonet at the Iowa State University through [@Herzmann_IEM_2023], where
+weather station data is aggregated from variable sources based on the
+standards shown in [@faa_asos_manual]. For our specific use case we
+decided to select data over a ten year period ranging from 2010 to 2020
+for nine Kanasa nodes. These nodes were selected primarily due to their
+proximity and location.
 
--   Highlight unexpected patterns or anomalies.
-
-A study was conducted to determine how...
+![](images/clipboard-2971954892.png){width="350"}
 
 ```{r, warning=FALSE, echo=FALSE}
 reticulate::repl_python()
@@ -185,7 +246,7 @@ import contextily as ctx
 from h3 import h3
 ```
 
-```{python, warning=FALSE, echo=TRUE}
+```{python, warning=FALSE, echo=FALSE}
 start_date = datetime.datetime(2010, 1, 1, 0, 0)
 end_date = datetime.datetime(2020, 12, 31, 0, 0)
 
@@ -253,7 +314,21 @@ asos_df = asos_ldf\
     .group_by(['station', 'valid'])\
     .mean()\
     .with_columns(pl.col(pl.Float64).cast(pl.Float32))
+    
+asos_df.head()
 ```
+
+#### 2. EDA
+
+Once the nine nodes were selected further analysis was required to both
+reduce the volume of data as well as to ensure the quality of the data
+as the source is very clear about the poor quality of the data provided.
+
+This reduction was initially done by first finding which features were
+missing no more than 10% of their values and then finding which nodes
+for a year range were missing no more than 10% of their values. During
+this step one node was dropped due to the fact that it was introduced
+after 2020 and thus had no valid data for the date-range selected.
 
 ```{python, warning=FALSE, echo=FALSE}
 potential_features = asos_ldf.drop('valid', 'station', 'lat', 'lon', 'elevation').collect_schema().names()
@@ -335,6 +410,11 @@ fig.supylabel("Year")
 
 plt.show()
 ```
+
+With this visual a date range was selected foe 2018 to 2020 as this
+range had the most valid features and stations while also being quite
+recent. As this range was selected the ULS station was dropped resulting
+in seven valid stations.
 
 ```{python, warning=FALSE, echo=FALSE}
 df_t = reduced_feature_df\
@@ -427,6 +507,17 @@ modified_adjacency_df = grid_map_df.select(pl.col(['station', 'index']))\
           on='index')
 ```
 
+#### 3. Graph Creation
+
+Once the valid date-range was selected and all features were reduced to
+only those that could be imputed the graph needed to be generated.
+
+As the number of nodes were low it made sense to generate a dense graph
+without self referencing. This was simple done by looping over every
+node and producing an adjacency matrix. The matrix was then weighted by
+the inverse distance scaled with a minmax scaler to ensure the values
+all ranged from 0 to 1.
+
 ```{python, warning=FALSE, echo=FALSE}
 station_node_list = [shapely.geometry.Point(lon, lat) for lat, lon in station_df[['lat', 'lon']].to_numpy()]
 stations_gdf = geopandas.GeoDataFrame(station_df.copy(), geometry=station_node_list, crs="EPSG:4326")
@@ -450,6 +541,16 @@ for i, row in stations_gdf.iterrows():
 
 ctx.add_basemap(ax, crs=stations_gdf.crs.to_string())
 ```
+
+#### 4. Graph Imputation
+
+Once the graph was created the data needed to be imputed both spatially
+and temporally. This was done through a two step process where first the
+data was imputed over the time slice only considering the spatial
+information, and then a second time temporally only considering the
+temporal information. While this process is not perfect it was able to
+accurately impute data for the spatiotemporal graph structure with no
+apparent issues as shown below.
 
 ```{python, warning=FALSE, echo=FALSE}
 adj = modified_adjacency_df.drop('station', 'index').to_numpy()
@@ -494,6 +595,16 @@ data_imputed = spatiotemporal_impute(station_matrix, adj)
 pd.DataFrame(data_imputed[:200, :, 2]).plot(legend=False, subplots=True, figsize=(20, 8))
 pd.DataFrame(station_matrix[:200, :, 2]).plot(legend=False, subplots=True, figsize=(20, 8))
 ```
+
+#### 5. Correlation Analysis
+
+Once the data was imputed and cleaned a Correlation Analysis was run to
+see if any features should be removed due to strong correlation. This
+analysis was done both between nodes and within the node. This analysis
+found that dwpf and feel both had a strong correlation with the target
+variable tmpf. This makes logical sense as both dewpoint and feels like
+temperature quite literally use temperature to calculate their values.
+As such these two features were removed.
 
 ```{python, warning=FALSE, echo=FALSE}
 def node_correlation(data, node_number):
@@ -542,6 +653,11 @@ plt.tight_layout()
 plt.show()
 ```
 
+Following the within node correlation, features were then compared
+between nodes which showed if it made any sense to consider the spatial
+relationship of the data. As shown below there is a very strong
+correlation between all nodes irregardless of feature.
+
 ```{python, warning=FALSE, echo=FALSE}
 fig, axes = plt.subplots(2, 4, figsize=(20, 10))
 axes = axes.flatten()
@@ -558,6 +674,12 @@ for i in range(data_imputed.shape[2]):
 plt.tight_layout()
 plt.show()
 ```
+
+#### 6. Scaling
+
+Following all of the above steps the final dataset was reduced to 5
+features, over 7 stations with 4381 6hr time steps. This dataset was
+then scaled through the use of sklearns robust scaler.
 
 ```{python, warning=FALSE, echo=FALSE}
 T, N, F = data_imputed.shape
@@ -913,21 +1035,6 @@ fig.tight_layout(rect=[0, 0.03, 1, 0.95])
 plt.show()
 ```
 
-```{python, warning=FALSE, echo=FALSE}
-
-```
-
-```{python, warning=FALSE, echo=FALSE}
-
-```
-
-```{python, warning=FALSE, echo=FALSE}
-
-```
-
-```{python, warning=FALSE, echo=FALSE}
-
-```
 ### Modeling and Results
 
 -   Explain your data preprocessing and cleaning steps.
@@ -949,5 +1056,3 @@ plt.show()
 -   Discuss the implications of your results.
 
 ## References
-
-
