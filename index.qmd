@@ -133,11 +133,11 @@ time step based on the preceding four time steps, analogous to the linear model.
 
 A study was conducted to determine how...
 
-```{r}
+```{r, warning=FALSE, echo=FALSE}
 reticulate::repl_python()
 ```
 
-```{python, warning=FALSE, echo=T, message=FALSE}
+```{python, warning=FALSE, echo=FALSE}
 # %pip install polars==1.22.0
 # %pip install numpy
 # %pip install pandas
@@ -152,52 +152,52 @@ reticulate::repl_python()
 # %pip install scikit-learn
 # %pip install tqdm
 # %pip install hypothesis==6.135.26
+# %pip install torch==2.7.0
+# %pip install torch-scatter==2.1.2 -f https://data.pyg.org/whl/torch-2.7.0+cpu.html
+# %pip install torch-sparse==0.6.18 -f https://data.pyg.org/whl/torch-2.7.0+cpu.html
+# %pip install torch-geometric==2.6.1
+# %pip install torch-geometric-temporal==0.56.2
 ```
 
-```{python, warning=FALSE, eval=FALSE}
-# Standard library imports (e.g., OS, datetime, etc.)
+```{python, warning=FALSE, echo=FALSE}
 import os
 import typing
 import datetime
 from pathlib import Path
 import shutil
 
-# Third-party libraries
 import numpy as np
 import polars as pl
 import seaborn as sns
 import pandas as pd
-from polars.testing.parametric import columns
-from sklearn.preprocessing import minmax_scale, robust_scale
 from tqdm import tqdm
 import geopy.distance
 import scipy
-import sklearn.preprocessing as pre
+import sklearn
 import geopandas
 import shapely
-from shapely.geometry import Polygon, Point, LineString
 import matplotlib.pyplot as plt
-import matplotlib.animation as animation
+
+import torch
+import torch_geometric_temporal
 
 import contextily as ctx
 from h3 import h3
 ```
 
 ```{python, warning=FALSE, echo=TRUE}
-import datetime
-import polars as pl
-
 start_date = datetime.datetime(2010, 1, 1, 0, 0)
 end_date = datetime.datetime(2020, 12, 31, 0, 0)
 
 seed = 3435
+split_index = 730
 
 pl.enable_string_cache()
 
 data_path = r'kansas_asos_2010_2020.csv'
 ```
 
-```{python, warning=FALSE, echo=TRUE}
+```{python, warning=FALSE, echo=FALSE}
 metar_schema = {'station': pl.Categorical,
                 'valid': pl.Datetime,
                 'lon': pl.Float64,
@@ -233,15 +233,13 @@ metar_schema = {'station': pl.Categorical,
                 'snowdepth': pl.Float64}
 ```
 
-```{python, warning=FALSE, echo=TRUE}
+```{python, warning=FALSE, echo=FALSE}
 asos_ldf = pl.scan_csv(data_path, null_values=['T', 'M', '///'], schema=metar_schema)\
     .drop('metar')\
     .with_columns(pl.col('valid').dt.round('1h').alias('valid'))
 ```
 
-```{python, warning=FALSE, echo=TRUE}
-import numpy as np
-
+```{python, warning=FALSE, echo=FALSE}
 full_date_series = np.arange(start_date, end_date, datetime.timedelta(hours=1))
 
 asos_df = asos_ldf\
@@ -257,7 +255,7 @@ asos_df = asos_ldf\
     .with_columns(pl.col(pl.Float64).cast(pl.Float32))
 ```
 
-```{python, warning=FALSE, echo=TRUE}
+```{python, warning=FALSE, echo=FALSE}
 potential_features = asos_ldf.drop('valid', 'station', 'lat', 'lon', 'elevation').collect_schema().names()
 feature_list = []
 
@@ -272,9 +270,7 @@ stations_list = asos_df\
     .to_list()
 ```
 
-```{python, warning=FALSE, echo=TRUE}
-from tqdm import tqdm
-
+```{python, warning=FALSE, echo=FALSE}
 def safe_index(item, lst):
     return item in lst
   
@@ -283,7 +279,7 @@ reduced_feature_df = pl.DataFrame(schema={**{'start_year': pl.Int64, 'end_year':
                                           **{station: pl.Boolean for station in stations_list}
                                           })
 
-for index, a in enumerate(tqdm(year_series)):
+for index, a in enumerate(year_series):
     for b in year_series[index:]:
         shifted_date_series = np.arange(datetime.date(a, 1, 1), datetime.date(b, 12, 31), datetime.timedelta(hours=6))
         year_filter_df = asos_df.filter(pl.col('valid').dt.year().is_between(a, b))
@@ -306,14 +302,11 @@ for index, a in enumerate(tqdm(year_series)):
                         reduced_feature_df = reduced_feature_df.vstack(new_row)
 ```
 
-```{python, warning=FALSE, echo=TRUE}
-import matplotlib.pyplot as plt
-import seaborn as sns
-
+```{python, warning=FALSE, echo=FALSE}
 features = reduced_feature_df.select(pl.col('feature')).unique().to_series().to_list()
 
 n_cols = 3
-n_rows = -(-len(features) // n_cols)  # Ceiling division
+n_rows = -(-len(features) // n_cols)
 
 fig, axes = plt.subplots(n_rows, n_cols, figsize=(n_cols * 4, n_rows * 3), constrained_layout=True,
                          sharex=True, sharey=True)
@@ -327,7 +320,7 @@ for idx, feature in enumerate(features):
         .to_pandas()
     )
 
-    plot_df.index = plot_df['year_label'].astype(str)  # Ensure index is str, not int
+    plot_df.index = plot_df['year_label'].astype(str)
     plot_df = plot_df.drop('year_label', axis=1)
     plot_df = plot_df.sort_index()
 
@@ -336,16 +329,14 @@ for idx, feature in enumerate(features):
 
     ax.set_title(feature)
 
-# Shared axis labels
 fig.suptitle("Station Participation by Feature and Year", fontsize=16)
 fig.supxlabel("Stations")
 fig.supylabel("Year")
 
 plt.show()
-
 ```
 
-```{python, warning=FALSE, echo=TRUE}
+```{python, warning=FALSE, echo=FALSE}
 df_t = reduced_feature_df\
     .filter(pl.col('year_label').eq('2018-2020'))\
     .drop('year_range', 'year_label', 'start_year', 'end_year')\
@@ -354,14 +345,12 @@ df_t = reduced_feature_df\
 
 new_headers = df_t.row(0)
 
-# Drop the first row
 df_t_no_header = df_t.slice(1, df_t.height - 1)
 
-# Assign new headers
 df_t_renamed = df_t_no_header.rename({old: str(new) for old, new in zip(df_t_no_header.columns, new_headers)})
 ```
 
-```{python, warning=FALSE, echo=TRUE}
+```{python, warning=FALSE, echo=FALSE}
 valid_features = [col for col in df_t_renamed.columns if col != "feature"]
 valid_stations = df_t_renamed\
     .with_columns(pl.col(valid_features)\
@@ -372,7 +361,7 @@ valid_stations = df_t_renamed\
     .to_list()
 ```
 
-```{python, warning=FALSE, echo=TRUE}
+```{python, warning=FALSE, echo=FALSE}
 reduced_asos_df = asos_df\
     .filter(pl.col('valid').is_between(datetime.datetime(2018, 1, 1, 0, 0), datetime.datetime(2021, 1, 1, 0, 0)))\
     .filter(pl.col('station').is_in(valid_stations))\
@@ -387,28 +376,23 @@ valid_station = reduced_asos_df.select(pl.col('station')).head(7).to_series().to
 station_count = len(valid_station)
 valid_features = reduced_asos_df.drop('station', 'valid', 'lat', 'lon', 'elevation').columns
 
-# shape is time, station, feature
 station_matrix = reduced_asos_df.drop('station', 'valid', 'lat', 'lon', 'elevation').to_numpy().reshape(int(row_count/station_count), station_count, feature_count)
 ```
 
-```{python, warning=FALSE, echo=TRUE}
+```{python, warning=FALSE, echo=FALSE}
 reduced_asos_df
 ```
 
-```{python, warning=FALSE, echo=TRUE}
+```{python, warning=FALSE, echo=FALSE}
 # as this is true it means there are no time slices where all values are nan
 not np.any(np.all(np.isnan(station_matrix), axis=(1, 2)))
 ```
 
-```{python, warning=FALSE, echo=TRUE}
-import geopy.distance
-# calculate the geodesic distance between two nodes
+```{python, warning=FALSE, echo=FALSE}
 def compute_node_distance(node1, node2, inverse=False):
     coords_1 = (node1[1], node1[0])
     coords_2 = (node2[1], node2[0])
-    # elevation_difference = abs(node1[2] - node2[2])
     horizontal_distance = geopy.distance.geodesic(coords_1, coords_2).km
-    # return math.sqrt(horizontal_distance**2 + (elevation_difference/1000)**2)
     if inverse:
         try:
             horizontal_distance = 1/horizontal_distance
@@ -417,7 +401,7 @@ def compute_node_distance(node1, node2, inverse=False):
     return horizontal_distance
 ```
 
-```{python, warning=FALSE, echo=TRUE}
+```{python, warning=FALSE, echo=FALSE}
 station_df = reduced_asos_df.select(pl.col(['station', 'lon', 'lat', 'elevation'])).unique().to_pandas()
 grid_list = station_df.loc[:, ['lon', 'lat']].reset_index()[['lon', 'lat', 'index']].to_numpy().tolist()
 grid_list = [sublist[:-1] + [int(sublist[-1])] for sublist in grid_list]
@@ -427,74 +411,58 @@ result_dict = {'index': [],
                'station': []}
 result_dict = {**result_dict, **{str(i): [] for _, _, i in grid_list}}
 
-# find the nearest mesh node for every station node
 for row_index, station in station_df.iterrows():
     for col_index, station2 in station_df.iterrows():
-        # To get elevation with the new system I would have to find a heightmap for the new lon/lat coordinates
         result_dict[str(col_index)].append(compute_node_distance([station['lon'], station['lat']], [station2['lon'], station2['lat']], inverse=True))
     result_dict['station'].append(station['station'])
     result_dict['index'].append(row_index)
 
-# # generate a dataframe that maps every station node to its relative mesh node with the inverse distance
 grid_map_df = pl.DataFrame(result_dict, schema={**{'station': pl.Categorical, 'index': pl.UInt64}, **{str(i): pl.Float64 for _, _, i in grid_list}})
 ```
 
-```{python, warning=FALSE, echo=TRUE}
-from sklearn.preprocessing import MinMaxScaler, minmax_scale
-
-scaled_idistance = minmax_scale(grid_map_df.drop('station', 'index'))
+```{python, warning=FALSE, echo=FALSE}
+scaled_idistance = sklearn.preprocessing.minmax_scale(grid_map_df.drop('station', 'index'))
 modified_adjacency_df = grid_map_df.select(pl.col(['station', 'index']))\
     .join(pl.DataFrame(scaled_idistance, schema=[str(i) for i, _ in enumerate(scaled_idistance)]).with_row_index(),
           on='index')
 ```
 
-```{python, warning=FALSE, echo=TRUE}
-from shapely.geometry import Polygon, Point, LineString
-import geopandas
-import contextily as ctx
-# Create Point geometries for each station (lon, lat order)
-station_node_list = [Point(lon, lat) for lat, lon in station_df[['lat', 'lon']].to_numpy()]
+```{python, warning=FALSE, echo=FALSE}
+station_node_list = [shapely.geometry.Point(lon, lat) for lat, lon in station_df[['lat', 'lon']].to_numpy()]
 stations_gdf = geopandas.GeoDataFrame(station_df.copy(), geometry=station_node_list, crs="EPSG:4326")
 
-# Create edges as LineStrings between all unique pairs of stations
 edge_list = []
 n = len(station_node_list)
 for i in range(n):
     for j in range(i + 1, n):
-        edge_list.append(LineString([station_node_list[i], station_node_list[j]]))
+        edge_list.append(shapely.geometry.LineString([station_node_list[i], station_node_list[j]]))
 
 edges_gdf = geopandas.GeoDataFrame(geometry=edge_list, crs="EPSG:4326")
 
-# Plot everything
 fig, ax = plt.subplots(figsize=(18, 10))
 
-# Plot edges
 edges_gdf.plot(ax=ax, color="xkcd:blue", linewidth=1, alpha=1)
 
-# Plot nodes
 stations_gdf.plot(ax=ax, color="xkcd:bright orange", markersize=10)
 
-# Add station labels
 for i, row in stations_gdf.iterrows():
     ax.text(row.geometry.x, row.geometry.y, row['station'], fontsize=9)
 
-# Add basemap
 ctx.add_basemap(ax, crs=stations_gdf.crs.to_string())
 ```
 
-```{python, warning=FALSE, echo=TRUE}
+```{python, warning=FALSE, echo=FALSE}
 adj = modified_adjacency_df.drop('station', 'index').to_numpy()
-adj = adj / adj.sum(axis=1, keepdims=True)  # row normalize
+adj = adj / adj.sum(axis=1, keepdims=True)
 
 def spatial_impute(data, adj):
     imputed = data.copy()
     T, N, F = data.shape
 
-    for t in range(T):  # time index
-        for i in range(N):  # station index
-            for f in range(F):  # feature index
+    for t in range(T):
+        for i in range(N):
+            for f in range(F):
                 if np.isnan(imputed[t, i, f]):
-                    # Get neighbor values and weights
                     neighbor_vals = imputed[t, :, f]
                     weights = adj[i]
                     mask = ~np.isnan(neighbor_vals)
@@ -507,15 +475,13 @@ def spatial_impute(data, adj):
 def spatiotemporal_impute(data, adj):
     data = spatial_impute(data, adj)
 
-    # fill remaining NaNs using temporal interpolation
     T, N, F = data.shape
-    for i in tqdm(range(N)):
+    for i in range(N):
         for f in range(F):
             series = data[:, i, f]
             mask = ~np.isnan(series)
             if mask.sum() == 0:
-                continue  # entire feature missing, can't interpolate
-            # Linear interpolation
+                continue
             indices = np.arange(T)
             data[:, i, f] = np.interp(indices, indices[mask], series[mask])
 
@@ -524,26 +490,21 @@ def spatiotemporal_impute(data, adj):
 data_imputed = spatiotemporal_impute(station_matrix, adj)
 ```
 
-```{python, warning=FALSE, echo=TRUE}
-import pandas as pd
+```{python, warning=FALSE, echo=FALSE}
 pd.DataFrame(data_imputed[:200, :, 2]).plot(legend=False, subplots=True, figsize=(20, 8))
 pd.DataFrame(station_matrix[:200, :, 2]).plot(legend=False, subplots=True, figsize=(20, 8))
 ```
 
-```{python, warning=FALSE, echo=TRUE}
+```{python, warning=FALSE, echo=FALSE}
 def node_correlation(data, node_number):
     T, N, F = data.shape
 
-    # Store correlation matrices per node (features x features)
     corr_within_node = np.empty((N, F, F))
 
     for node in range(N):
-        # Slice data for node: shape (T, F)
         node_data = data[:, node, :]
-        # Compute correlation matrix (features x features)
         corr_within_node[node] = np.corrcoef(node_data, rowvar=False)
 
-    # Example: correlation between feature 0 and feature 1 at node 0
     corr_list = []
     for f_feature in range(F):
         inner_list = []
@@ -556,7 +517,6 @@ def node_correlation(data, node_number):
     return corr_list
   
 def between_node_correlation(data, feature_number):
-
     feature_data = data[:, :, feature_number]
 
     corr_between_nodes = np.corrcoef(feature_data.T)
@@ -565,7 +525,7 @@ def between_node_correlation(data, feature_number):
     return corr_between_nodes
 ```
 
-```{python, warning=FALSE, echo=TRUE}
+```{python, warning=FALSE, echo=FALSE}
 fig, axes = plt.subplots(2, 4, figsize=(20, 10))
 axes = axes.flatten()
 
@@ -582,8 +542,8 @@ plt.tight_layout()
 plt.show()
 ```
 
-```{python, warning=FALSE, echo=TRUE}
-fig, axes = plt.subplots(2, 4, figsize=(20, 10))  # 2 rows, 4 columns grid
+```{python, warning=FALSE, echo=FALSE}
+fig, axes = plt.subplots(2, 4, figsize=(20, 10))
 axes = axes.flatten()
 
 for i in range(data_imputed.shape[2]):
@@ -599,9 +559,7 @@ plt.tight_layout()
 plt.show()
 ```
 
-```{python, warning=FALSE, echo=TRUE}
-from sklearn.preprocessing import robust_scale
-
+```{python, warning=FALSE, echo=FALSE}
 T, N, F = data_imputed.shape
 imputed_df = pl.from_numpy(data_imputed.reshape(T * N, F), schema=valid_features)\
     .drop('dwpf', 'feel')\
@@ -614,28 +572,360 @@ imputed_df = pl.from_numpy(data_imputed.reshape(T * N, F), schema=valid_features
     .with_columns(pl.col('relh')/100)
 
 imputed_df = imputed_df.drop('tmpf', 'sknt')\
-    .hstack(pl.DataFrame(robust_scale(imputed_df.select(pl.col('tmpf'))), schema=['tmpf']))\
-    .hstack(pl.DataFrame(robust_scale(imputed_df.select(pl.col('sknt'))), schema=['sknt']))\
+    .hstack(pl.DataFrame(sklearn.preprocessing.robust_scale(imputed_df.select(pl.col('tmpf'))), schema=['tmpf']))\
+    .hstack(pl.DataFrame(sklearn.preprocessing.robust_scale(imputed_df.select(pl.col('sknt'))), schema=['sknt']))\
     .select(pl.col(['station', 'tmpf', 'relh', 'sknt', 'drct_sin', 'drct_cos']))
 
 imputed_df
 ```
 
-```{python, warning=FALSE, echo=TRUE}
-# if the station is going to be used for linear regression apply a one-hot encoding to it
+```{python, warning=FALSE, echo=FALSE}
 imputed_pd_df = imputed_df.to_pandas()
-imputed_pl_df = imputed_df
+imputed_pl_df = imputed_df.drop('station')
 ```
 
-```{python, warning=FALSE, echo=TRUE}
+```{python, warning=FALSE, echo=FALSE}
+row_count, feature_count = imputed_pl_df.shape
+station_count = imputed_df.select(pl.col('station').unique()).count().item()
+np_imp_array = imputed_pl_df.to_numpy().reshape(int(row_count/station_count), station_count, feature_count)
+```
+
+```{python, warning=FALSE, echo=FALSE}
+def concat_past_timesteps(data, window=4):
+    T, _, _ = data.shape
+
+    slices = [data[i:T - window + i + 1] for i in range(window)]
+
+    return np.concatenate(slices[::-1], axis=2)
+
+lagged_array = concat_past_timesteps(np_imp_array, 28)
+```
+
+```{python, warning=FALSE, echo=FALSE}
+T, N, F = lagged_array.shape
+
+edge_index = [[i, j] for i in range(N) for j in range(N) if i != j]
+edge_weight = np.array([float(adj[edge[0], edge[1]]) for edge in edge_index])
+edge_index = np.array(edge_index).T
+features = [lagged_array[t, :, :] for t in range(T-1)]
+targets = [lagged_array[t+1, :, 0] for t in range(T-1)]
+```
+
+```{python, warning=FALSE, echo=FALSE}
+class RecurrentGCN(torch.nn.Module):
+    def __init__(self, node_features):
+        super(RecurrentGCN, self).__init__()
+        self.recurrent1 = torch_geometric_temporal.nn.recurrent.DCRNN(node_features, 64, 1)
+        self.recurrent2 = torch_geometric_temporal.nn.recurrent.DCRNN(64, 32, 1)
+        self.recurrent3 = torch_geometric_temporal.nn.recurrent.DCRNN(32, 32, 1)
+
+        self.linear = torch.nn.Linear(32, 1)
+
+    def forward(self, x, edge_index, edge_weight):
+        h = self.recurrent1(x, edge_index, edge_weight)
+        h = torch.nn.functional.relu(h)
+
+        h = self.recurrent2(h, edge_index, edge_weight)
+        h = torch.nn.functional.relu(h)
+
+        h = self.recurrent3(h, edge_index, edge_weight)
+        h = torch.nn.functional.relu(h)
+
+        h = self.linear(h)
+        return h
+```
+
+```{python, warning=FALSE, echo=FALSE}
+dataset = torch_geometric_temporal.signal.StaticGraphTemporalSignal(
+    edge_index=edge_index,
+    edge_weight=edge_weight,
+    features=features,
+    targets=targets
+)
+
+train_dataset, test_dataset = torch_geometric_temporal.temporal_signal_split(dataset, train_ratio=(T-split_index)/T)
+train_dataset, validation_dataset = torch_geometric_temporal.temporal_signal_split(train_dataset, train_ratio=0.8)
+
+gnn_model = RecurrentGCN(node_features = F)
+
+optimizer = torch.optim.Adam(gnn_model.parameters(), lr=0.01)
+scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+    optimizer,
+    mode='min',
+    factor=0.1,
+    patience=5,
+    min_lr=1e-5,
+)
+```
+
+```{python, warning=FALSE, echo=FALSE}
+if not os.path.exists('best_model.pt'):
+    best_loss = float('inf')
+    patience = 10
+    trigger_times = 0
+    target_epochs = 100
+
+    gnn_model.train()
+    with tqdm(total=target_epochs) as pbar:
+        for epoch in range(target_epochs):
+            gnn_model.train()
+            torch.enable_grad()
+            train_cost = 0
+
+            for time, snapshot in enumerate(train_dataset):
+                y_hat = gnn_model(snapshot.x, snapshot.edge_index, snapshot.edge_attr)
+                train_cost += torch.mean((y_hat - snapshot.y)**2)
+
+            train_cost /= (time + 1)
+            train_cost.backward()
+            optimizer.step()
+            optimizer.zero_grad()
+
+            scheduler.step(train_cost.item())
+
+            gnn_model.eval()
+            val_loss = 0
+            with torch.no_grad():
+                for time, snapshot in enumerate(validation_dataset):
+                    y_hat = gnn_model(snapshot.x, snapshot.edge_index, snapshot.edge_attr)
+                    val_loss += torch.mean((y_hat - snapshot.y)**2)
+                val_loss /= (time + 1)
+
+            pbar.set_postfix({
+                'train_loss': train_cost.item(),
+                'val_loss': val_loss.item(),
+                'lr': optimizer.param_groups[0]['lr']
+            })
+            pbar.update(1)
+
+            if best_loss < 0.05 and epoch > 1:
+                print(f"Early stopping triggered at epoch {epoch + 1}")
+                break
+
+            if val_loss.item() < best_loss:
+                best_loss = val_loss.item()
+                trigger_times = 0
+                torch.save(gnn_model.state_dict(), 'best_model.pt')
+            else:
+                trigger_times += 1
+                if trigger_times >= patience:
+                    print(f"Early stopping triggered at epoch {epoch + 1}")
+                    break
+else:
+    gnn_model.load_state_dict(torch.load('best_model.pt'))
+```
+
+```{python, warning=FALSE, echo=FALSE}
+gnn_model.eval()
+cost = 0
+for time, snapshot in enumerate(test_dataset):
+    y_hat = gnn_model(snapshot.x, snapshot.edge_index, snapshot.edge_attr)
+    cost = cost + torch.mean((y_hat - snapshot.y)**2)
+cost = cost / (time+1)
+cost = cost.item()
+print("MSE: {:.4f}".format(cost))
+```
+
+```{python, warning=FALSE, echo=FALSE}
+all_preds = []
+all_targets = []
+
+gnn_model.eval()
+with torch.no_grad():
+    for snapshot in test_dataset:
+        y_pred = gnn_model(snapshot.x, snapshot.edge_index, snapshot.edge_attr).squeeze()
+        y_true = snapshot.y.squeeze()
+        all_preds.append(y_pred.cpu().numpy())
+        all_targets.append(y_true.cpu().numpy())
+
+all_preds = np.stack(all_preds)
+all_targets = np.stack(all_targets)
+
+num_nodes = all_preds.shape[1]
+num_time_steps = all_preds.shape[0]
+
+cols = 1
+rows = num_nodes
+
+fig, axes = plt.subplots(rows, cols, figsize=(15, 20), sharex=True, sharey=True)
+
+for node in range(num_nodes):
+    ax = axes[node]
+    ax.plot(all_targets[:, node], label='Actual', color='blue', linewidth=1)
+    ax.plot(all_preds[:, node], label='Predicted', color='orange', linewidth=1)
+    ax.set_title(f'Station {stations_list[node]}')
+    ax.grid(True)
+
+# Only add legend to one plot
+axes[0].legend(loc='upper right')
+
+fig.suptitle("GNN Actual vs Predicted Over Time for Each Node", fontsize=16)
+fig.tight_layout(rect=[0, 0.03, 1, 0.95])
+plt.show()
+```
+
+```{python, warning=FALSE, echo=FALSE}
+all_preds = []
+all_targets = []
+
+gnn_model.eval()
+with torch.no_grad():
+    for snapshot in test_dataset:
+        y_pred = gnn_model(snapshot.x, snapshot.edge_index, snapshot.edge_attr).squeeze()
+        y_true = snapshot.y.squeeze()
+        all_preds.append(y_pred.cpu().numpy())
+        all_targets.append(y_true.cpu().numpy())
+
+all_preds = np.stack(all_preds)
+all_targets = np.stack(all_targets)
+
+gnn_absolute_error = np.abs(np.subtract(np.array(all_preds, dtype=float), np.array(all_targets, dtype=float)))
+
+fig, axes = plt.subplots(rows, cols, figsize=(15, 20), sharex=True, sharey=True)
+for node in range(num_nodes):
+    ax = axes[node]
+    ax.plot(gnn_absolute_error[:, node], label='Error', color='blue', linewidth=1)
+    ax.set_title(f'Station {stations_list[node]}')
+    ax.grid(True)
+
+axes[0].legend(loc='upper right')
+
+fig.suptitle("GNN Absolute Error for Each Station", fontsize=16)
+fig.tight_layout(rect=[0, 0.03, 1, 0.95])
+plt.show()
+```
+
+```{python, warning=FALSE, echo=FALSE}
+flattened_array = np.mean(lagged_array, axis=1)
+
+T, N, F = lagged_array.shape
+
+X = flattened_array[:-1]
+X_train, X_test = np.split(X, [T-split_index])
+y_true = flattened_array[1:, 0]
+y_train, y_test = np.split(y_true, [T-split_index])
+
+for node_index in range(N):
+  node_slice = lagged_array[:, node_index, :]
+  _, node_test = np.split(node_slice, [T-split_index])
+```
+
+```{python, warning=FALSE, echo=FALSE}
+lr_model = sklearn.linear_model.LinearRegression()
+lr_model.fit(X_train, y_train)
+y_pred = lr_model.predict(X_test)
+
+mse = sklearn.metrics.mean_squared_error(y_test, y_pred)
+print(f"MSE: {mse:.4f}")
+```
+
+```{python, warning=FALSE, echo=FALSE}
+num_nodes = lagged_array[T-split_index:, :, :].shape[1]
+num_time_steps = lagged_array[T-split_index:, :, :].shape[0]
+
+cols = 1
+rows = num_nodes
+
+fig, axes = plt.subplots(rows, cols, figsize=(15, 20), sharex=True, sharey=True)
+
+for node in range(num_nodes):
+    all_targets = lagged_array[T-split_index+1:, node, 0]
+    all_preds = lr_model.predict(lagged_array[T-split_index:-1, node, :])
+    ax = axes[node]
+    ax.plot(all_targets, label='Actual', color='blue', linewidth=1)
+    ax.plot(all_preds, label='Predicted', color='orange', linewidth=1)
+    ax.set_title(f'Station {stations_list[node]}')
+    ax.grid(True)
+
+axes[0].legend(loc='upper right')
+
+fig.suptitle("LR Actual vs Predicted Over Time for Each Node", fontsize=16)
+fig.tight_layout(rect=[0, 0.03, 1, 0.95])
+plt.show()
+```
+
+```{python, warning=FALSE, echo=FALSE}
+num_nodes = lagged_array[T-split_index:, :, :].shape[1]
+num_time_steps = lagged_array[T-split_index:, :, :].shape[0]
+
+cols = 1
+rows = num_nodes
+
+
+fig, axes = plt.subplots(rows, cols, figsize=(15, 20), sharex=True, sharey=True)
+for node in range(num_nodes):
+    all_targets = lagged_array[T-split_index+1:, node, 0]
+    all_preds = lr_model.predict(lagged_array[T-split_index:-1, node, :])
+    lr_absolute_error = np.abs(np.subtract(all_targets, all_preds))
+
+    ax = axes[node]
+    ax.plot(lr_absolute_error, label='Error', color='blue', linewidth=1)
+    ax.set_title(f'Station {stations_list[node]}')
+    ax.grid(True)
+
+axes[0].legend(loc='upper right')
+
+fig.suptitle("LR Absolute Error for Each Station", fontsize=16)
+fig.tight_layout(rect=[0, 0.03, 1, 0.95])
+plt.show()
+```
+
+```{python, warning=FALSE, echo=FALSE}
+num_nodes = lagged_array[T-split_index:, :, :].shape[1]
+num_time_steps = lagged_array[T-split_index:, :, :].shape[0]
+
+cols = 1
+rows = num_nodes
+
+all_preds = []
+all_targets = []
+
+gnn_model.eval()
+with torch.no_grad():
+    for snapshot in test_dataset:
+        y_pred = gnn_model(snapshot.x, snapshot.edge_index, snapshot.edge_attr).squeeze()
+        y_true = snapshot.y.squeeze()
+        all_preds.append(y_pred.cpu().numpy())
+        all_targets.append(y_true.cpu().numpy())
+
+all_preds = np.stack(all_preds)
+all_targets = np.stack(all_targets)
+
+gnn_absolute_error = np.abs(np.subtract(np.array(all_preds, dtype=float), np.array(all_targets, dtype=float)))
+
+fig, axes = plt.subplots(rows, 1, figsize=(15, 20), sharex=True, sharey=True)
+for node in range(num_nodes):
+    all_targets = lagged_array[T-split_index+1:, node, 0]
+    all_preds = lr_model.predict(lagged_array[T-split_index:-1, node, :])
+    lr_absolute_error = np.abs(np.subtract(all_targets, all_preds))
+    relative_error = np.abs(gnn_absolute_error[1:, node] - lr_absolute_error)
+
+    ax = axes[node]
+    ax.plot(gnn_absolute_error[:, node], label='GNN - Error', color='blue', linewidth=1)
+    ax.plot(lr_absolute_error, label='LR - Error', color='orange', linewidth=1)
+    ax.set_title(f'Station {stations_list[node]}')
+    ax.set_xlim(left=0, right=500)
+
+axes[0].legend(loc='upper right')
+
+fig.suptitle("GNN vs. LR Absolute Error for Each Station", fontsize=16)
+fig.tight_layout(rect=[0, 0.03, 1, 0.95])
+plt.show()
+```
+
+```{python, warning=FALSE, echo=FALSE}
 
 ```
 
-```{python, warning=FALSE, echo=TRUE}
+```{python, warning=FALSE, echo=FALSE}
 
 ```
 
-```{python, warning=FALSE, echo=TRUE}
+```{python, warning=FALSE, echo=FALSE}
+
+```
+
+```{python, warning=FALSE, echo=FALSE}
 
 ```
 ### Modeling and Results
