@@ -78,7 +78,7 @@ features of interest are as follows with descriptions from
 [@Herzmann_IEM_2023]:
 
 | Feature | Description |
-|------------|------------------------------------------------------------|
+|-------------------|-----------------------------------------------------|
 | station | Station identifier code (3/4 characters) |
 | valid | Timestamp of the observation |
 | lon | Longitude of station |
@@ -195,7 +195,7 @@ proximity and location.
 ![](images/clipboard-2971954892.png){width="350"}
 
 ```{r, warning=FALSE, echo=FALSE}
-reticulate::repl_python()
+# reticulate::repl_python()
 ```
 
 ```{python, warning=FALSE, echo=FALSE}
@@ -465,7 +465,7 @@ reduced_asos_df
 
 ```{python, warning=FALSE, echo=FALSE}
 # as this is true it means there are no time slices where all values are nan
-not np.any(np.all(np.isnan(station_matrix), axis=(1, 2)))
+# not np.any(np.all(np.isnan(station_matrix), axis=(1, 2)))
 ```
 
 ```{python, warning=FALSE, echo=FALSE}
@@ -592,8 +592,11 @@ data_imputed = spatiotemporal_impute(station_matrix, adj)
 ```
 
 ```{python, warning=FALSE, echo=FALSE}
-pd.DataFrame(data_imputed[:200, :, 2]).plot(legend=False, subplots=True, figsize=(20, 8))
-pd.DataFrame(station_matrix[:200, :, 2]).plot(legend=False, subplots=True, figsize=(20, 8))
+_ = pd.DataFrame(data_imputed[:200, :, 2]).plot(legend=False, subplots=True, figsize=(20, 8))
+```
+
+```{python, warning=FALSE, echo=FALSE}
+_ = pd.DataFrame(station_matrix[:200, :, 2]).plot(legend=False, subplots=True, figsize=(20, 8))
 ```
 
 #### 5. Correlation Analysis
@@ -646,11 +649,11 @@ for i in range(data_imputed.shape[1]):
         columns=valid_features,
         index=valid_features
     )
-    sns.heatmap(corr_matrix, annot=True, cmap='coolwarm', vmin=-1, vmax=1, ax=axes[i])
-    axes[i].set_title(f'{valid_station[i]} Correlation')
+    _ = sns.heatmap(corr_matrix, annot=True, cmap='coolwarm', vmin=-1, vmax=1, ax=axes[i])
+    _ = axes[i].set_title(f'{valid_station[i]} Correlation')
 
-plt.tight_layout()
-plt.show()
+_ = plt.tight_layout()
+_ = plt.show()
 ```
 
 Following the within node correlation, features were then compared
@@ -668,11 +671,11 @@ for i in range(data_imputed.shape[2]):
         columns=valid_station,
         index=valid_station
     )
-    sns.heatmap(corr_matrix, annot=True, cmap='coolwarm', vmin=-1, vmax=1, ax=axes[i])
-    axes[i].set_title(f'Between-Node Correlation: {valid_features[i]}')
+    _ = sns.heatmap(corr_matrix, annot=True, cmap='coolwarm', vmin=-1, vmax=1, ax=axes[i])
+    _ = axes[i].set_title(f'Between-Node Correlation: {valid_features[i]}')
 
-plt.tight_layout()
-plt.show()
+_ = plt.tight_layout()
+_ = plt.show()
 ```
 
 #### 6. Scaling
@@ -834,11 +837,11 @@ if not os.path.exists('best_model.pt'):
                     print(f"Early stopping triggered at epoch {epoch + 1}")
                     break
 else:
-    gnn_model.load_state_dict(torch.load('best_model.pt'))
+    gnn_model.load_state_dict(torch.load('best_model.pt'));
 ```
 
 ```{python, warning=FALSE, echo=FALSE}
-gnn_model.eval()
+gnn_model.eval();
 cost = 0
 for time, snapshot in enumerate(test_dataset):
     y_hat = gnn_model(snapshot.x, snapshot.edge_index, snapshot.edge_attr)
@@ -852,7 +855,7 @@ print("MSE: {:.4f}".format(cost))
 all_preds = []
 all_targets = []
 
-gnn_model.eval()
+gnn_model.eval();
 with torch.no_grad():
     for snapshot in test_dataset:
         y_pred = gnn_model(snapshot.x, snapshot.edge_index, snapshot.edge_attr).squeeze()
@@ -873,24 +876,23 @@ fig, axes = plt.subplots(rows, cols, figsize=(15, 20), sharex=True, sharey=True)
 
 for node in range(num_nodes):
     ax = axes[node]
-    ax.plot(all_targets[:, node], label='Actual', color='blue', linewidth=1)
-    ax.plot(all_preds[:, node], label='Predicted', color='orange', linewidth=1)
-    ax.set_title(f'Station {stations_list[node]}')
-    ax.grid(True)
+    _ = ax.plot(all_targets[:, node], label='Actual', color='blue', linewidth=1)
+    _ = ax.plot(all_preds[:, node], label='Predicted', color='orange', linewidth=1)
+    _ = ax.set_title(f'Station {stations_list[node]}')
+    _ = ax.grid(True)
 
-# Only add legend to one plot
-axes[0].legend(loc='upper right')
+_ = axes[0].legend(loc='upper right')
 
-fig.suptitle("GNN Actual vs Predicted Over Time for Each Node", fontsize=16)
-fig.tight_layout(rect=[0, 0.03, 1, 0.95])
-plt.show()
+_ = fig.suptitle("GNN Actual vs Predicted Over Time for Each Node", fontsize=16)
+_ = fig.tight_layout(rect=[0, 0.03, 1, 0.95])
+_ = plt.show()
 ```
 
 ```{python, warning=FALSE, echo=FALSE}
 all_preds = []
 all_targets = []
 
-gnn_model.eval()
+gnn_model.eval();
 with torch.no_grad():
     for snapshot in test_dataset:
         y_pred = gnn_model(snapshot.x, snapshot.edge_index, snapshot.edge_attr).squeeze()
@@ -906,15 +908,15 @@ gnn_absolute_error = np.abs(np.subtract(np.array(all_preds, dtype=float), np.arr
 fig, axes = plt.subplots(rows, cols, figsize=(15, 20), sharex=True, sharey=True)
 for node in range(num_nodes):
     ax = axes[node]
-    ax.plot(gnn_absolute_error[:, node], label='Error', color='blue', linewidth=1)
-    ax.set_title(f'Station {stations_list[node]}')
-    ax.grid(True)
+    _ = ax.plot(gnn_absolute_error[:, node], label='Error', color='blue', linewidth=1)
+    _ = ax.set_title(f'Station {stations_list[node]}')
+    _ = ax.grid(True)
 
-axes[0].legend(loc='upper right')
+_ = axes[0].legend(loc='upper right')
 
-fig.suptitle("GNN Absolute Error for Each Station", fontsize=16)
-fig.tight_layout(rect=[0, 0.03, 1, 0.95])
-plt.show()
+_ = fig.suptitle("GNN Absolute Error for Each Station", fontsize=16)
+_ = fig.tight_layout(rect=[0, 0.03, 1, 0.95])
+_ = plt.show()
 ```
 
 ```{python, warning=FALSE, echo=FALSE}
@@ -934,7 +936,7 @@ for node_index in range(N):
 
 ```{python, warning=FALSE, echo=FALSE}
 lr_model = sklearn.linear_model.LinearRegression()
-lr_model.fit(X_train, y_train)
+lr_model.fit(X_train, y_train);
 y_pred = lr_model.predict(X_test)
 
 mse = sklearn.metrics.mean_squared_error(y_test, y_pred)
@@ -954,16 +956,16 @@ for node in range(num_nodes):
     all_targets = lagged_array[T-split_index+1:, node, 0]
     all_preds = lr_model.predict(lagged_array[T-split_index:-1, node, :])
     ax = axes[node]
-    ax.plot(all_targets, label='Actual', color='blue', linewidth=1)
-    ax.plot(all_preds, label='Predicted', color='orange', linewidth=1)
-    ax.set_title(f'Station {stations_list[node]}')
-    ax.grid(True)
+    _ = ax.plot(all_targets, label='Actual', color='blue', linewidth=1)
+    _ = ax.plot(all_preds, label='Predicted', color='orange', linewidth=1)
+    _ = ax.set_title(f'Station {stations_list[node]}')
+    _ = ax.grid(True)
 
-axes[0].legend(loc='upper right')
+_ = axes[0].legend(loc='upper right')
 
-fig.suptitle("LR Actual vs Predicted Over Time for Each Node", fontsize=16)
-fig.tight_layout(rect=[0, 0.03, 1, 0.95])
-plt.show()
+_ = fig.suptitle("LR Actual vs Predicted Over Time for Each Node", fontsize=16)
+_ = fig.tight_layout(rect=[0, 0.03, 1, 0.95])
+_ = plt.show()
 ```
 
 ```{python, warning=FALSE, echo=FALSE}
@@ -981,15 +983,15 @@ for node in range(num_nodes):
     lr_absolute_error = np.abs(np.subtract(all_targets, all_preds))
 
     ax = axes[node]
-    ax.plot(lr_absolute_error, label='Error', color='blue', linewidth=1)
-    ax.set_title(f'Station {stations_list[node]}')
-    ax.grid(True)
+    _ = ax.plot(lr_absolute_error, label='Error', color='blue', linewidth=1)
+    _ = ax.set_title(f'Station {stations_list[node]}')
+    _ = ax.grid(True)
 
-axes[0].legend(loc='upper right')
+_ = axes[0].legend(loc='upper right')
 
-fig.suptitle("LR Absolute Error for Each Station", fontsize=16)
-fig.tight_layout(rect=[0, 0.03, 1, 0.95])
-plt.show()
+_ = fig.suptitle("LR Absolute Error for Each Station", fontsize=16)
+_ = fig.tight_layout(rect=[0, 0.03, 1, 0.95])
+_ = plt.show()
 ```
 
 ```{python, warning=FALSE, echo=FALSE}
@@ -1002,7 +1004,7 @@ rows = num_nodes
 all_preds = []
 all_targets = []
 
-gnn_model.eval()
+gnn_model.eval();
 with torch.no_grad():
     for snapshot in test_dataset:
         y_pred = gnn_model(snapshot.x, snapshot.edge_index, snapshot.edge_attr).squeeze()
@@ -1023,16 +1025,16 @@ for node in range(num_nodes):
     relative_error = np.abs(gnn_absolute_error[1:, node] - lr_absolute_error)
 
     ax = axes[node]
-    ax.plot(gnn_absolute_error[:, node], label='GNN - Error', color='blue', linewidth=1)
-    ax.plot(lr_absolute_error, label='LR - Error', color='orange', linewidth=1)
-    ax.set_title(f'Station {stations_list[node]}')
-    ax.set_xlim(left=0, right=500)
+    _ = ax.plot(gnn_absolute_error[:, node], label='GNN - Error', color='blue', linewidth=1)
+    _ = ax.plot(lr_absolute_error, label='LR - Error', color='orange', linewidth=1)
+    _ = ax.set_title(f'Station {stations_list[node]}')
+    _ = ax.set_xlim(left=0, right=500)
 
-axes[0].legend(loc='upper right')
+_ = axes[0].legend(loc='upper right')
 
-fig.suptitle("GNN vs. LR Absolute Error for Each Station", fontsize=16)
-fig.tight_layout(rect=[0, 0.03, 1, 0.95])
-plt.show()
+_ = fig.suptitle("GNN vs. LR Absolute Error for Each Station", fontsize=16)
+_ = fig.tight_layout(rect=[0, 0.03, 1, 0.95])
+_ = plt.show()
 ```
 
 ### Modeling and Results
