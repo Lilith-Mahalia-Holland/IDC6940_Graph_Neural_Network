@@ -1,7 +1,7 @@
 ---
-title: "Predicting Weather Data"
-subtitle: "with Kansas ASOS"
-author: "Lillith Holland & Colby Fenters (Advisor: Dr. Cohen)"
+title: "Predictive Modeling of Weather Station Data:"
+subtitle: "Linear Regression vs. Graph Neural Network"
+author: "Colby Fenters & Lillith Holland (Advisor: Dr. Cohen)"
 date: '`r Sys.Date()`'
 format:
   revealjs
@@ -18,107 +18,124 @@ editor:
 
 ## Introduction {.smaller}
 
-- Weather prediction plays a vital role in many industries such as agriculture, aviation, and public safety.
-- Most models today rely on physical simulations or treat each weather station in isolation.
-- Problem: Can we improve short-term weather forecasting by modeling relationships between weather stations?
-- Why it matters: More accurate short-term forecasts help with operational planning, energy grid management, and severe weather alerts.
-- Our approach:  
-  - Compare a Graph Neural Network (GNN) and a Linear Model (LM)  
-  - Predict key weather feature (temperature) for the next time step  
-  - Use spatiotemporal data from ASOS weather stations
+-   Weather prediction plays a vital role in many industries such as
+    agriculture, aviation, and public safety.
+-   Most models today rely on physical simulations or treat each weather
+    station in isolation.
+-   Problem: Can we improve short-term weather forecasting by modeling
+    relationships between weather stations?
+-   Why it matters: More accurate short-term forecasts help with
+    operational planning, energy grid management, and severe weather
+    alerts.
+-   Our approach:
+    -   Compare a Graph Neural Network (GNN) and a Linear Model (LM)\
+    -   Predict key weather feature (temperature) for the next time
+        step\
+    -   Use spatiotemporal data from ASOS weather stations
 
----
+------------------------------------------------------------------------
 
 ## Methods {.smaller}
 
 #### Graph Neural Network (GNN)
-- Nodes represent different Kansas weather stations
-- Edges based on physical distance (lat/lon)
-- Input is a sliding window of past 28 time steps per node
-- Captures both spatial and temporal relationships
+
+-   Nodes represent different Kansas weather stations
+-   Edges based on physical distance (lat/lon)
+-   Input is a sliding window of past 28 time steps per node
+-   Captures both spatial and temporal relationships
 
 #### Linear Model
-- Simpler, interpretable baseline
-- Uses past 28 time steps, flattened across all stations
-- Predicts next-step features with multivariate linear regression
+
+-   Simpler, interpretable baseline
+-   Uses past 28 time steps, flattened across all stations
+-   Predicts next-step features with multivariate linear regression
 
 #### Why these models?
-- GNN: Ideal for structured spatial data
-- LM: Provides a benchmark and assesses the added value of modeling spatial structure
 
----
+-   GNN: Ideal for structured spatial data
+-   LM: Provides a benchmark and assesses the added value of modeling
+    spatial structure
+
+------------------------------------------------------------------------
 
 ## Data Exploration {.smaller}
 
 #### Data Sources:
-- **ASOS**: Real-time observational data (e.g., temp, wind, humidity)  
 
+-   **ASOS**: Real-time observational data (e.g., temp, wind, humidity)
 
 #### Data Dimensions:
-- Shape: `(T, N, F)`  
-  - `T` = time steps  
-  - `N` = stations  
-  - `F` = features
+
+-   Shape: `(T, N, F)`
+    -   `T` = time steps\
+    -   `N` = stations\
+    -   `F` = features
 
 #### Key Insights:
-- Seasonal patterns, daily cycles visible in temperature and wind
-- Correlation between nearby stations supports the case for GNNs
-- Some stations had missing data, which was handled with imputation
+
+-   Seasonal patterns, daily cycles visible in temperature and wind
+-   Correlation between nearby stations supports the case for GNNs
+-   Some stations had missing data, which was handled with imputation
 
 ---
 ## Data Visualization
 
 #### Example here
-
 ---
 
 ## Modeling and Results {.smaller}
 
 #### Preprocessing Steps:
-- Filled missing data with imputation
-- Normalized features per station
-- Created lag features using a rolling window of 28 time steps
+
+-   Filled missing data with imputation
+-   Normalized features per station
+-   Created lag features using a rolling window of 28 time steps
 
 #### Evaluation Strategy:
-- Train/test split: Final 6 months (730 steps) reserved for testing
-- Metrics: MAE, MSE
-- Visual comparison of predicted vs actual values
+
+-   Train/test split: Final 6 months (730 steps) reserved for testing
+-   Metrics: MAE, MSE
+-   Visual comparison of predicted vs actual values
 
 #### Key Findings:
-- **LM**: Decent baseline, captures general trends but struggles with sharp transitions
-- **GNN**: Outperforms LM in high-variance conditions, learns inter-station patterns
 
----
+-   **LM**: Decent baseline, captures general trends but struggles with
+    sharp transitions
+-   **GNN**: Outperforms LM in high-variance conditions, learns
+    inter-station patterns
+
+------------------------------------------------------------------------
 
 ## Modeling and Results (cont.)
 
-> *(Include side-by-side plot of actual vs predicted for LM and GNN)*  
+> *(Include side-by-side plot of actual vs predicted for LM and GNN)*\
 > *(Insert metric comparison table or bar chart)*
 
----
+------------------------------------------------------------------------
 
 ## Conclusion {.smaller}
 
-- Main takeaway:  
-  - GNNs more effectively capture spatial relationships between stations  
-  - Linear Models still perform reasonably and are easier to interpret
+-   Main takeaway:
+    -   GNNs more effectively capture spatial relationships between
+        stations\
+    -   Linear Models still perform reasonably and are easier to
+        interpret
+-   Why it matters:
+    -   Modeling spatial structure in weather forecasting improves
+        accuracy\
+    -   Can benefit decision-making in real-time systems
+-   Possible Expansions:
+    -   Try other architectures (e.g., Temporal GNNs, transformers)
+    -   Multi-step forecasting
+    -   Real-time implementation pipeline
 
-- Why it matters:  
-  - Modeling spatial structure in weather forecasting improves accuracy  
-  - Can benefit decision-making in real-time systems
-
-- Possible Expansions:  
-  - Try other architectures (e.g., Temporal GNNs, transformers) 
-  - Multi-step forecasting
-  - Real-time implementation pipeline
-
----
+------------------------------------------------------------------------
 
 ## References
 
-- @tubelwj2023
-- @noaa_asos
-- @hrrr_dataset
-- @wu2021gnns
+-   @tubelwj2023
+-   @noaa_asos
+-   @hrrr_dataset
+-   @wu2021gnns
 
 > *(Ensure all citation keys exist in `references.bib`)*

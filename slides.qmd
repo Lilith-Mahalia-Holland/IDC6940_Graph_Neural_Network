@@ -29,7 +29,7 @@ More information about `revealjs`:
 <https://quarto.org/docs/reference/formats/presentations/revealjs.html>
 :::
 
-## Introduction  {.smaller}
+## Introduction {.smaller}
 
 -   Develop a storyline that captures attention and maintains interest.
 
@@ -50,8 +50,6 @@ The PCA [@daffertshofer2004pca]\*
 -   Detail the models or algorithms used.
 
 -   Justify your choices based on the problem and data.
-
-
 
 ## Data Exploration and Visualization
 
