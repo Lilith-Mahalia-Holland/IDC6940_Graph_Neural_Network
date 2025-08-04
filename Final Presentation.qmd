@@ -1,13 +1,22 @@
 ---
 title: "Predictive Modeling of Weather Station Data:"
 subtitle: "Linear Regression vs. Graph Neural Network"
-author: "Colby Fenters & Lillith Holland (Advisor: Dr. Cohen)"
-date: '`r Sys.Date()`'
+author: "Colby Fenters & Lilith Holland (Advisor: Dr. Cohen)"
+date: today
+date-format: long
+# format:
+#   revealjs
 format:
-  revealjs
+  revealjs:
+    slide-level: 2
+    navigation-mode: linear
+    smaller: true
+    toc: true
+    toc-depth: 1
+    self-contained: true
 course: Capstone Projects in Data Science
 bibliography: references.bib
-self-contained: true
+# self-contained: true
 execute: 
   warning: false
   message: false
@@ -16,126 +25,434 @@ editor:
     wrap: 72
 ---
 
-## Introduction {.smaller}
+# Introduction
 
--   Weather prediction plays a vital role in many industries such as
-    agriculture, aviation, and public safety.
--   Most models today rely on physical simulations or treat each weather
-    station in isolation.
--   Problem: Can we improve short-term weather forecasting by modeling
-    relationships between weather stations?
--   Why it matters: More accurate short-term forecasts help with
-    operational planning, energy grid management, and severe weather
-    alerts.
--   Our approach:
-    -   Compare a Graph Neural Network (GNN) and a Linear Model (LM)\
-    -   Predict key weather feature (temperature) for the next time
-        step\
-    -   Use spatiotemporal data from ASOS weather stations
+-   Accurate weather prediction is a crucial task with widespread
+    implications across many fields.
+-   Traditional forecasting methods often rely on statistical models or
+    physics-based simulations.
+-   In this project, we explore the predictive power of a traditional
+    linear regression model and a GNN on real-world weather station data
+    [@Herzmann_IEM_2023].
 
-------------------------------------------------------------------------
+::: notes
+-   agriculture, transportation, disaster preparedness, and energy
+    management
+-   with the advancement of graphical neural networks (GNN) we believe
+    there is potential in a more modern deep learning approach
+-   Our evaluation focuses on forecasting performance over the last
+    6-months of the dataset.
+:::
 
-## Methods {.smaller}
+# Methodology
 
-#### Graph Neural Network (GNN)
+-   Cleaning Process
+-   Correlation Analysis
+-   Feature Imputation
+-   Graph Neural Network
+-   Linear Model
 
--   Nodes represent different Kansas weather stations
--   Edges based on physical distance (lat/lon)
--   Input is a sliding window of past 28 time steps per node
--   Captures both spatial and temporal relationships
+::: notes
+-   For the methodology we focused on 5 concise steps of the modeling
+    processing as shown.
+:::
 
-#### Linear Model
+## Cleaning Process
 
--   Simpler, interpretable baseline
--   Uses past 28 time steps, flattened across all stations
--   Predicts next-step features with multivariate linear regression
+-   The raw weather station data underwent a multistage cleaning and
+    preprocessing procedure designed to ensure temporal consistency,
+    handle missing values, and prepare the data for both linear and
+    GNN-based models.
+-   The dataset is of shape (time, feature) where each node has a record
+    for each time step resulting in each time having 8 records, one for
+    each node.
+-   Data was downsampled from 1-hour intervals to 6-hour intervals to
+    reduce noise and improve model efficiency.
+-   The final dataset was transformed into a 3D array off shape (time,
+    station, feature).
 
-#### Why these models?
+::: notes
+-   Missing time steps were filled for all stations.
+-   Features missing more than 10% of their values in over 6 out of 8
+    stations were removed.
+:::
 
--   GNN: Ideal for structured spatial data
--   LM: Provides a benchmark and assesses the added value of modeling
-    spatial structure
+## Correlation Analysis
 
-------------------------------------------------------------------------
+-   The correlation analysis is done to minimize data leakage as many
+    weather features are directly calculated from temperature.
+-   Inter-node correlation had each node was broken into its own dataset
+    and then within the node all features were compared against each
+    other.
+-   Intra-node correlationhad each feature was broken into its own
+    dataset and then within the feature all nodes were compared against
+    each other.
 
-## Data Exploration {.smaller}
+::: notes
+-   Two kinds of correlation analysis were done, Inter-node and
+    Intra-node.
+-   Inter-node: this was done to identify any offending feature for
+    removal as data leakage is highly likely in this kind of machine
+    learning task.
+-   Intra-node: this was done to see the importance of spatial
+    information.
+:::
 
-#### Data Sources:
+## Feature Imputation
 
--   **ASOS**: Real-time observational data (e.g., temp, wind, humidity)
+-   Interpolation was incredibly important for this task as the data
+    used in this project comes from real world weather sensors and as
+    such is plagued with quality issues.
+-   For the spatial imputation step each time step was analysed and any
+    with missing features had the missing values calculated based on the
+    neighboring nodes and the graph edge weights.
+-   In situations where all nodes are missing a feature it is impossible
+    to perform the spatial imputation step and as such a more naive
+    temporal imputation was required.
 
-#### Data Dimensions:
+::: notes
+-   Two kinds of imputation were done, spatial and temporal.
+-   Spatial imputation allowed the process to only consider spatial
+    relationships for imputing which is more powerful than focusing
+    purely on temporal imputation.
+-   Temporal imputation is weaker, the only thing that could be done was
+    to interpolate between the missing time steps and go from there.
+:::
 
--   Shape: `(T, N, F)`
-    -   `T` = time steps\
-    -   `N` = stations\
-    -   `F` = features
+## Graph Neural Network
 
-#### Key Insights:
+-   The GNN is structured to model the spatiotemporal dynamics of the
+    weather station network. It is implemented through PyTorch, the
+    architecture is inspired by the Diffusion Convolutional Recurrent
+    Neural Network (DCRNN)
+    [@li2018diffusionconvolutionalrecurrentneural].
+-   The model was tested against the last 6 months of the selected
+    dataset.
+-   The GNN uses the preceding 28 time steps to forecast the next
+    temperature value.
 
--   Seasonal patterns, daily cycles visible in temperature and wind
--   Correlation between nearby stations supports the case for GNNs
--   Some stations had missing data, which was handled with imputation
+::: notes
+-   Each weather station is represented as a node, and spatial
+    relationships are encoded in a dense adjacency matrix (excluding
+    self-loops)
+-   The input is formatted using the StaticGraphTemporalSignal class
+    from torch-geometric-temporal, which supports the temporal sequences
+    on a static graph.
+-   DCRN(140, 64) -\> ReLU -\> DCRN(64, 32) -\> ReLU -\> DCRN(32, 32)
+    -\> ReLU -\> Linear(32, 1)
+:::
 
----
-## Data Visualization
+## Linear Model
 
-#### Example here
----
+-   The linear baseline model was designed as a univariate time-series
+    regression task.
+-   At each time step t, the input vector aggregates the five base
+    features across all stations:
 
-## Modeling and Results {.smaller}
+$$ \text{tmpf}_{t+1}=\text{features}_t+\text{features}_{t-1}+...+\text{features}_{t-27} $$
 
-#### Preprocessing Steps:
+Where:
 
--   Filled missing data with imputation
--   Normalized features per station
--   Created lag features using a rolling window of 28 time steps
+$$ \text{features}_t=\text{\{tmpf, }\text{relh, }\text{sknt, }\text{drct}_{sin}\text{, drct}_{cos}\text{\}} $$
 
-#### Evaluation Strategy:
+tmpf: Temperature
 
--   Train/test split: Final 6 months (730 steps) reserved for testing
--   Metrics: MAE, MSE
--   Visual comparison of predicted vs actual values
+relh: Relative Humidity
 
-#### Key Findings:
+sknt: Wind Speed
 
--   **LM**: Decent baseline, captures general trends but struggles with
-    sharp transitions
--   **GNN**: Outperforms LM in high-variance conditions, learns
-    inter-station patterns
+$\text{drct}_{sin}\text{, drct}_{cos}\text{: }$Wind Direction encoded as
+sine and cosine components
 
-------------------------------------------------------------------------
+::: notes
+-   This flattened representation allows a standard linear regression
+    model to be trained on a fixed-length vector for each prediction
+    target and simplifies the graph structure of the weather stations.
+-   This process of flattening the stations into a single point does
+    remove any spatial information from the model
+-   The linear model uses the same training/test split as the GNN
+    excluding the validation set.
+:::
 
-## Modeling and Results (cont.)
+# Analysis
 
-> *(Include side-by-side plot of actual vs predicted for LM and GNN)*\
-> *(Insert metric comparison table or bar chart)*
+-   Data Source
+-   Data Structure
+-   Exploratory Data Analysis
+-   Graph Creation
+-   Spatiotemporal Imputation
+-   Correlation Analysis
+-   Final Preparation
 
-------------------------------------------------------------------------
+::: notes
+-   Nothing more to say
+:::
 
-## Conclusion {.smaller}
+## Data Source
 
--   Main takeaway:
-    -   GNNs more effectively capture spatial relationships between
-        stations\
-    -   Linear Models still perform reasonably and are easier to
-        interpret
--   Why it matters:
-    -   Modeling spatial structure in weather forecasting improves
-        accuracy\
-    -   Can benefit decision-making in real-time systems
--   Possible Expansions:
-    -   Try other architectures (e.g., Temporal GNNs, transformers)
-    -   Multi-step forecasting
-    -   Real-time implementation pipeline
+::::: columns
+::: {.column width="40%"}
+-   The dataset used in this project was sourced from the Iowa
+    Environmental Mesonet (IEM) hosted by the Iowa State University
+    [@Herzmann_IEM_2023].
+-   The data follows observational standards set by the FAA Automated
+    Surface Observing System (ASOS) [@faa_asos_manual].
+:::
 
-------------------------------------------------------------------------
+::: {.column width="60%"}
+![](images/clipboard-1833160392.png)
+:::
+:::::
 
-## References
+::: notes
+-   For this project, we selected a subset covering a 10-year period
+    from 2010 to 2020, focusing on nine weather stations located in
+    south eastern Kansas.
+-   These nodes were chosen based on geographic proximity and
+    consistency of data availability.
+:::
 
--   @tubelwj2023
--   @noaa_asos
--   @hrrr_dataset
--   @wu2021gnns
+## Data Structure
 
-> *(Ensure all citation keys exist in `references.bib`)*
+::::: columns
+::: {.column width="40%"}
+-   The original dataset contains:
+    -   33 features
+    -   8 stations
+    -   96,408 hourly time steps
+-   With intermittent missing values across both time and stations
+:::
+
+::: {.column width="60%"}
+| Feature   | Description                                    |
+|-----------|------------------------------------------------|
+| station   | Station identifier code (3-4 characters)       |
+| valid     | Timestamp of the observation                   |
+| lon       | Longitude                                      |
+| lat       | Latitude                                       |
+| elevation | Elevation in feet                              |
+| tmpf      | Air temperature (F)                            |
+| relh      | Relative humidity (%)                          |
+| drct      | Wind direction (degrees)                       |
+| sknt      | Wind speed (knots)                             |
+| p01i      | Precipitations (inches) over the previous hour |
+| vsby      | visibility (miles)                             |
+:::
+:::::
+
+::: notes
+-   While additional features are present in the dataset, many were
+    excluded form analysis due to limited relevance or poor data
+    quality.
+:::
+
+## Exploratory Data Analysis {.scrollable}
+
+-   Initial exploratory analysis focused on filtering out low-quality features and stations as well as general reduction in the dimensionality of the dataset.
+-   The visual below shows all features that meet these conditions for varying time slices, as well as a 0/1 flag for if the station is valid within the time slice.
+-   With this visual a date range was selected from 2018 to 2020 as this range had the most valid features and stations while also being quite recent.
+
+![](images/clipboard-2390309202.png)⠀
+
+::: notes
+-   Features with more than 10% missing values were removed.
+-   Stations with excessive missing data during the 2010-2020 window were dropped.
+-   The ULS station was dropped
+:::
+
+## Graph Creation {.scrollable}
+
+-   To prepare the dataset for graph-based modeling, a spatial graph was constructed.
+-   Edge weights were defined as the inverse of the geodesic distance, scaled to a [0, 1] range using MinMax scaler. The closer two stations are, the stronger their connection in the graph.
+
+![](images/clipboard-1377963172.png)⠀
+
+
+::: notes
+-   Each station was treated as a node.
+-   A dense adjacency matrix (excluding self-connections) was created by computing geodesic distances between stations.
+:::
+
+## Spatiotemporal Imputation {.scrollable}
+-   Missing values were imputed through a two-stage process leveraging both spatial and temporal structure.
+-   Spatial Imputation: Each missing value was estimated based on the value of neighboring nodes within the same time step, weighted by graph connectivity.
+-   Temporal Imputation: Remaining gaps were filled by interpolating along the time axis for each node individually.
+
+Below is an example of the data requiring both spatial and temporal imputation:
+![](images/clipboard-3369587814.png)
+Below is the same data post imputation:
+![](images/clipboard-2264760746.png)
+
+::: notes
+-   While not a perfect method, this approach produced plausible and continuous data, as visually confirmed during quality checks as shown in the visuals.
+:::
+
+## Correlation Analysis {.scrollable}
+
+-   To avoid feature redundancy and data leakage, a correlation analysis was conducted.
+-   Inter-node correlation was done to find any relationships between features within a node.
+-   Intra-node correlation was done to explore the importance of spatial information across features.
+
+Below shows the inter-node correlation:
+![](images/clipboard-499462486.png)
+Below shows the intra-node correlation:
+![](images/clipboard-343898519.png)
+
+::: notes
+-   Inter-node and Intra-node correlations were computed.
+-   Two features, dwpf (dew point in f) and feel (feels-like temperature in f), showed high correlation with the target variable tmpf (temperature in f). 
+-   Since these variables are partially derived from the target variable tmpf, they were removed to maintain model integrity and avoid leakage.
+:::
+
+## Final Preparation
+
+-   After all preprocessing steps, the final dataset was reduced and standardized.
+    -   5 features were retained: tmpf, relh, sknt, drct_sin, drct_cos.
+    -   7 stations remained after filtering.
+    -   4,381 time steps at 6-hour intervals (equivalent to 2 years of data) remained.
+
+::: notes
+-   The remaining unscaled features were scaled using the RobusScaler from scikit-learn to mitigate the influence of outliers while preserving overall data distribution.
+:::
+
+# Modeling and Results
+
+-   Model 1: GNN
+-   Model 2: LR
+-   Error Comparison
+-   Key Findings
+
+::: notes
+-   Discuss the reason for comparing errors as a performance metric.
+-   This is because Error comparison gives a temporal view of how the model differ.
+:::
+
+## Model 1: GNN
+
+-   The Graph Neural Network was trained using the previous 28 time steps (equivalent to 7 days) and leveraged a dense spatial graph connecting all stations.
+-   This structure enabled the model to learn both temporal sequences and spatial diffusion patters across the weather station network.
+-   The model had a final MSE of 0.0562.
+
+::: notes
+-   Graph Structure: Dense graph with edge weights based on inverse geodesic distance
+-   Architecture: Three stacked DCRNN layers + ReLU activations + Linear projection
+-   Target: Next-step temperature prediction for each node
+:::
+
+## GNN Results {.scrollable}
+
+::::: columns
+::: {.column width="50%"}
+![](images/clipboard-1987425428.png)
+:::
+
+::: {.column width="50%"}
+![](images/clipboard-762293348.png)
+:::
+:::::
+
+::: notes
+-   It is visually apparent that the model is able to follow the temporal trends of the weather data with some latency in predictive results appearing to be quite accurate.
+-   However, it is also apparent that there is a weird latency in the results of the prediction as an absolute error of 1 is quite extreme given the total range of the test features is -1.5 to 1.5.
+:::
+
+## Model 2: LR
+
+-   The linear baseline model was trained using the same 28-time-step history with aggregated weather station data to predict the next time step’s temperature. 
+-   All features were flattened into a single vector, treating the problem as a high-dimensional regression task with no spatial awareness.
+-   The model had a final MSE of 0.0147.
+
+::: notes
+-   Strengths: Simplicity, interpretability, low training time.
+-   Weakness: Cannot leverage inter-station relationships or dynamic spatial trends.
+:::
+
+## LR Results {.scrollable}
+
+::::: columns
+::: {.column width="50%"}
+![](images/clipboard-528191597.png)
+:::
+
+::: {.column width="50%"}
+![](images/clipboard-4038232185.png)
+:::
+:::::
+
+::: notes
+-   It is visually apparent that the model performs quite a bit better than the GNN as there is little latency in the predicted results.
+-   It is also clear that the maximum absolute error is 0.8 which is quite a bit less than the 1 for the GNN model.
+:::
+
+## Error Comparison {.scrollable}
+
+::::: columns
+::: {.column width="40%"}
+-   When both models are compared against each other per station it becomes apparent how poorly the GNN is performing on these predictive tasks.
+-   Overall the LM shows an average low error rate as well as more consistent results.
+:::
+
+::: {.column width="60%"}
+![](images/clipboard-1735287296.png)
+:::
+:::::
+
+::: notes
+-   This shows that despite the fact that the linear model is unable to consider spatial information, in this case spatial information may not actually be important for the applied dataset.
+:::
+
+## Key Findings
+
+-   Small Graph structures do not matter.
+-   Temporal Context is Crucial.
+-   Feature Engineering Adds Value.
+-   Graph Structure is Important.
+-   Static Graphs are Restrictive.
+
+::: notes
+-   These are in order.
+1.  The GNN severely underperformed the linear model in both MSE and absolute error across all stations, highlighting the power of a standard linear model on a small scale weather system.
+2.  Both models benefitted from the use of 28 historical time steps, suggesting that short-term temporal trends are strong predictors of near-future temperature.
+3.  Replacing wind direction with sin/cosine components improved learning stability and reduced directional ambiguity.
+4.  The small scale of the graph most likely played a significant role in the underperformance of the GNN model.
+5.  Not applying and encoding and decoding layer to the GNN most likely limited information transfer between nodes, however, this may not have been important for such a small system.
+:::
+
+# Conclusion
+
+-   Key Results
+-   Future Work
+
+::: notes
+-   Nothing to add
+:::
+
+## Key Results
+
+-   A Graph Neural Network trained on a spatiotemporal weather data may not outperform a standard linear regression baseline for short-term temperature prediction.
+-   Incorporating spatial structure through graph edges enabled the model to learn regional weather interactions that linear models could not.
+-   Careful data preprocessing, including imputation, scaling, and circular feature handling was essential to achieving strong performance from both models.
+-   GNNs are incredibly sensitive to parameter tuning and may outperform if provided a much larger model structure or more careful tuning.
+
+
+::: notes
+-   If given more time the GNN would outperform the LM in this task, however, more tuning would be required.
+:::
+
+## Future Work
+
+-   These findings demonstrate the potential of traditional models compared to graph-based deep learning approaches.  
+-   it is apparent that the reliance on aggregating stations as is done with the linear model most likely only worked due to the close proximity of the stations.
+-   we still believe there is potential in the application of a graph-based deep learning approach when it comes to large scale weather forecasting.
+-   If the dataset was instead made from all of the stations across the US it most likely wouldn't be possible to aggregate in a way that still preserves spatial information.
+
+::: notes
+-   Future improvements could include:
+    -   Proper multivariate analysis
+    -   Large geographic area
+    -   Application of an encoding-decoding step
+    -   More advanced GNN variants
+    -   Exploring other imputation techniques
+:::
+
+# References
